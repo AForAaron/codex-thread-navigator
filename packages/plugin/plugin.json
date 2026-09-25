@@ -1,0 +1,10 @@
+{
+  "id": "codex-navigator",
+  "name": "Codex Navigator",
+  "version": "0.1.0",
+  "entry": "index.js",
+  "description": "Long-thread navigation for Codex Desktop. Off by default. Does not modify Codex.app.",
+  "documentation": "README.md",
+  "dynamicLoadable": true,
+  "dynamicUnloadable": true
+}

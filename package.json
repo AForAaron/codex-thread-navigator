@@ -1,0 +1,35 @@
+{
+  "name": "codex-navigator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Codex Desktop 长对话导航增强（Explodex 插件 + 本地 SQLite 索引）。不修改 Codex.app / ChatGPT.app。",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.web.json && npm run build:plugin && npm run build:preview",
+    "build:plugin": "esbuild packages/plugin/src/index.ts --bundle --format=iife --platform=browser --target=es2022 --outfile=dist/plugin/index.js && cp packages/plugin/plugin.json dist/plugin/plugin.json && cp packages/plugin/README.md dist/plugin/README.md",
+    "build:preview": "esbuild packages/preview/src/main.ts --bundle --format=iife --platform=browser --target=es2022 --outfile=dist/preview/preview.js",
+    "init-data-dir": "node scripts/init-data-dir.mjs",
+    "test": "npm run build && node --test dist/packages/core/src/persistence/schema.test.js dist/packages/core/src/adapters/codex-current.test.js dist/packages/core/src/appserver/client.test.js dist/packages/core/src/hash.test.js dist/packages/core/src/reading/restore.test.js dist/packages/core/src/reading/progress.test.js dist/packages/core/src/keymap/shortcuts.test.js dist/packages/core/src/preview-contract.test.js dist/packages/core/src/bookmarks/types.test.js dist/packages/core/src/outline/headings.test.js dist/packages/core/src/search/search.test.js dist/packages/core/src/follow/follow.test.js dist/packages/core/src/export/export.test.js dist/packages/core/src/discovery/local-history.test.js dist/packages/core/src/quota/session-quota.test.js",
+    "verify:codex": "bash scripts/verify-codex-untouched.sh",
+    "land": "tsc -p tsconfig.json && CODEX_NAV_READ_HISTORY=1 node scripts/land-real-anchors.mjs",
+    "preview": "tsc -p tsconfig.json && npm run build:preview && node scripts/preview-server.mjs",
+    "preview:panel": "npm run preview",
+    "e2e:preview": "npm run build:preview && node scripts/e2e-preview.mjs",
+    "e2e:index": "tsc -p tsconfig.json && node scripts/e2e-index.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "esbuild": "^0.25.9",
+    "playwright-core": "^1.55.0",
+    "typescript": "~5.9.2"
+  },
+  "optionalDependencies": {
+    "explodex": "0.2.2"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true
+  }
+}

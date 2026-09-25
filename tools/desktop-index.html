@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>Codex Navigator · 本机索引</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Cache-Control" content="no-store" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0e0e13;
+        --panel: #1c1b22;
+        --line: #46464f;
+        --text: #e4e1e9;
+        --muted: #acaab4;
+        --accent: #b4c5ff;
+        --active: color-mix(in srgb, #b4c5ff 22%, #1c1b22);
+      }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+        font: 13px/1.45 ui-sans-serif, system-ui; }
+      .shell { display: flex; height: 100vh; }
+      .official {
+        flex: 1; min-width: 0; display: flex; flex-direction: column;
+        border-right: 1px solid var(--line);
+      }
+      .official-top {
+        display: flex; align-items: center; gap: 8px; padding: 10px 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      .pill {
+        margin: 0; padding: 3px 9px; border-radius: 999px; font-size: 11px;
+        background: #2a2430; color: #efe3b0; border: 1px solid #5c5340;
+      }
+      .pill.warn { background: #2a1c1c; color: #ffb4ab; border-color: #8c1d18; }
+      .official-body {
+        flex: 1; display: flex; flex-direction: column; justify-content: center;
+        gap: 10px; padding: 32px 40px; color: var(--muted);
+      }
+      .official-body h1 { margin: 0 0 8px; font-size: 18px; color: var(--text); font-weight: 600; }
+      .official-body p { margin: 0; max-width: 36rem; }
+      .anchor { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--accent); }
+      html:not([data-debug="true"]) .debug { display: none !important; }
+      .nav {
+        width: 300px; display: flex; flex-direction: column; background: var(--panel);
+        padding: 12px;
+      }
+      .nav-head { display: flex; justify-content: space-between; align-items: center; }
+      .nav-head strong { font-size: 16px; }
+      .gear { border: 1px solid var(--line); background: transparent; color: inherit;
+        border-radius: 999px; width: 32px; height: 32px; cursor: pointer; }
+      .gear[aria-pressed="true"] { background: var(--accent); color: #1b1b21; }
+      select, .field { width: 100%; box-sizing: border-box; margin: 8px 0; min-height: 34px;
+        border-radius: 10px; border: 1px solid var(--line); background: #131318; color: inherit; padding: 6px 8px; }
+      .tabs { display: flex; gap: 4px; margin: 6px 0 8px; }
+      .tabs button {
+        flex: 1; border: 0; background: #131318; color: var(--muted); border-radius: 999px;
+        padding: 6px 0; cursor: pointer;
+      }
+      .tabs button[aria-selected="true"] { background: var(--accent); color: #1b1b21; font-weight: 600; }
+      ul { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; }
+      li { display: flex; gap: 8px; padding: 8px; border-radius: 10px; cursor: pointer; }
+      li:hover { background: #2a2930; }
+      li.active { background: var(--active); }
+      .idx { flex: 0 0 1.6rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+      .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .settings { display: flex; flex-direction: column; gap: 8px; }
+      .settings[hidden], ul[hidden] { display: none !important; }
+      .row { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+      .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+      .actions button {
+        border: 1px solid var(--line); background: #131318; color: inherit;
+        border-radius: 999px; padding: 5px 10px; cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <main class="official">
+        <div class="official-top">
+          <p class="pill">本机索引 · 不是 Codex Desktop</p>
+          <p class="pill warn">官方窗口点目录：还不会跳转</p>
+        </div>
+        <div class="official-body">
+          <h1>官方对话保持原样</h1>
+          <p>中间不渲染会话正文。右侧只列当前 thread 的 User Prompt。选中后把 Thread / Turn / Item / Hash / Offset 写入本地 navigator.sqlite。</p>
+          <p id="status">正在读取本机 thread 库…</p>
+          <p class="anchor" id="anchor" data-cn="anchor"></p>
+          <p class="debug" id="debug"></p>
+        </div>
+      </main>
+      <aside class="nav" data-codex-navigator="true">
+        <div class="nav-head">
+          <strong>提问列表</strong>
+          <button type="button" class="gear" data-cn="settings-gear" aria-label="设置">⚙</button>
+        </div>
+        <select data-cn="thread" id="thread"></select>
+        <div class="tabs" role="tablist">
+          <button type="button" data-tab="prompts" aria-selected="true">提问</button>
+          <button type="button" data-tab="bookmarks">书签</button>
+        </div>
+        <ul id="prompts" data-cn-list="prompts"></ul>
+        <ul id="bookmarks" data-cn-list="bookmarks" hidden></ul>
+        <div class="settings" data-cn-list="settings" hidden>
+          <div class="row"><label><input type="checkbox" id="autoRestore" checked /> 自动恢复阅读位置</label></div>
+          <div class="row"><label><input type="checkbox" id="showDebug" /> 显示调试信息</label></div>
+        </div>
+        <div class="actions">
+          <button type="button" id="bookmarkTurn">★ 轮次</button>
+          <button type="button" id="bookmarkMsg">★ 消息</button>
+          <button type="button" id="bookmarkHd">★ 标题</button>
+        </div>
+      </aside>
+    </div>
+    <script>
+      const $ = (sel) => document.querySelector(sel);
+      const state = {
+        threads: [],
+        prompts: [],
+        bookmarks: [],
+        threadId: null,
+        selected: null,
+        tab: "prompts",
+        settingsOpen: false,
+      };
+
+      function clip(id) {
+        return id ? `${String(id).slice(0, 13)}…` : "—";
+      }
+
+      async function api(path, opts) {
+        const res = await fetch(path, {
+          headers: { "content-type": "application/json" },
+          ...opts,
+        });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error || res.statusText);
+        return body;
+      }
+
+      function renderThreads() {
+        const sel = $("#thread");
+        sel.innerHTML = "";
+        for (const row of state.threads) {
+          const opt = document.createElement("option");
+          opt.value = row.threadId;
+          opt.textContent = row.title || clip(row.threadId);
+          if (row.threadId === state.threadId) opt.selected = true;
+          sel.append(opt);
+        }
+      }
+
+      function renderPrompts() {
+        const list = $("#prompts");
+        list.innerHTML = "";
+        state.prompts.forEach((row, i) => {
+          const li = document.createElement("li");
+          li.dataset.turnId = row.turnId;
+          li.dataset.itemId = row.itemId;
+          li.className = row.turnId === state.selected?.turnId ? "active" : "";
+          li.innerHTML = `<span class="idx">${String(i + 1).padStart(2, "0")}</span><span class="title"></span>`;
+          li.querySelector(".title").textContent = row.title;
+          li.addEventListener("click", () => selectPrompt(row));
+          list.append(li);
+        });
+      }
+
+      function renderBookmarks() {
+        const list = $("#bookmarks");
+        list.innerHTML = "";
+        for (const row of state.bookmarks) {
+          const li = document.createElement("li");
+          li.dataset.turnId = row.turnId || "";
+          li.dataset.kind = row.kind;
+          li.innerHTML = `<span class="idx">${row.kind}</span><span class="title"></span>`;
+          li.querySelector(".title").textContent = row.title || clip(row.turnId);
+          li.addEventListener("click", () => {
+            const prompt = state.prompts.find((p) => p.turnId === row.turnId);
+            if (prompt) selectPrompt(prompt);
+          });
+          list.append(li);
+        }
+      }
+
+      function applyTab() {
+        $("#prompts").hidden = state.settingsOpen || state.tab !== "prompts";
+        $("#bookmarks").hidden = state.settingsOpen || state.tab !== "bookmarks";
+        $("[data-cn-list='settings']").hidden = !state.settingsOpen;
+        for (const btn of document.querySelectorAll("[data-tab]")) {
+          btn.setAttribute("aria-selected", !state.settingsOpen && btn.dataset.tab === state.tab ? "true" : "false");
+        }
+        $("[data-cn='settings-gear']").setAttribute("aria-pressed", state.settingsOpen ? "true" : "false");
+      }
+
+      function showAnchor(row, note) {
+        $("#status").textContent = note;
+        $("#anchor").textContent = row
+          ? `锚点 ${clip(row.threadId)} / ${clip(row.turnId)}`
+          : "";
+        $("#debug").textContent = row
+          ? `thread=${row.threadId} turn=${row.turnId} item=${row.itemId}`
+          : "";
+        window.__CN_INDEX__ = {
+          threadId: state.threadId,
+          turnId: row?.turnId ?? null,
+          itemId: row?.itemId ?? null,
+          promptCount: state.prompts.length,
+          settingsOpen: state.settingsOpen,
+          fixture: Boolean(state.threadId?.startsWith("thread_preview")),
+        };
+      }
+
+      async function selectPrompt(row, bookmarkKind) {
+        state.selected = row;
+        renderPrompts();
+        const body = await api("/api/select", {
+          method: "POST",
+          body: JSON.stringify({
+            threadId: row.threadId,
+            turnId: row.turnId,
+            itemId: row.itemId,
+            bookmarkKind: bookmarkKind || null,
+          }),
+        });
+        state.bookmarks = body.bookmarks || [];
+        renderBookmarks();
+        showAnchor(row, "已写入阅读位置。官方 ChatGPT 窗口不会滚动。");
+      }
+
+      async function loadThread(threadId) {
+        state.threadId = threadId;
+        const data = await api(`/api/threads/${encodeURIComponent(threadId)}/prompts`);
+        state.prompts = data.prompts || [];
+        const st = await api(`/api/threads/${encodeURIComponent(threadId)}/state`);
+        state.bookmarks = st.bookmarks || [];
+        renderThreads();
+        renderPrompts();
+        renderBookmarks();
+        const saved = st.reading;
+        const restored = saved?.turnId
+          ? state.prompts.find((p) => p.turnId === saved.turnId)
+          : null;
+        if (restored && $("#autoRestore").checked) {
+          state.selected = restored;
+          renderPrompts();
+          showAnchor(restored, "已从 navigator.sqlite 恢复阅读位置。");
+        } else {
+          showAnchor(null, `本 thread 有 ${state.prompts.length} 条 User Prompt。点一条即写入锚点。`);
+        }
+      }
+
+      async function boot() {
+        const data = await api("/api/threads");
+        state.threads = data.threads || [];
+        if (state.threads.length === 0) {
+          $("#status").textContent = "还没有索引。需要时在仓库里手动跑一次 npm run land（短时只读打开对话库后退出）。预览服务不会扫 ~/.codex。";
+          return;
+        }
+        await loadThread(data.selectedThreadId || state.threads[0].threadId);
+      }
+
+      $("#thread").addEventListener("change", (event) => loadThread(event.target.value));
+      $("[data-cn='settings-gear']").addEventListener("click", () => {
+        state.settingsOpen = !state.settingsOpen;
+        if (!state.settingsOpen) state.tab = "prompts";
+        applyTab();
+        window.__CN_INDEX__.settingsOpen = state.settingsOpen;
+      });
+      for (const btn of document.querySelectorAll("[data-tab]")) {
+        btn.addEventListener("click", () => {
+          state.settingsOpen = false;
+          state.tab = btn.dataset.tab;
+          applyTab();
+        });
+      }
+      $("#showDebug").addEventListener("change", () => {
+        document.documentElement.dataset.debug = $("#showDebug").checked ? "true" : "";
+      });
+      $("#bookmarkTurn").addEventListener("click", () => state.selected && selectPrompt(state.selected, "turn"));
+      $("#bookmarkMsg").addEventListener("click", () => state.selected && selectPrompt(state.selected, "message"));
+      $("#bookmarkHd").addEventListener("click", () => state.selected && selectPrompt(state.selected, "heading"));
+      boot().catch((err) => {
+        $("#status").textContent = "读取失败：" + err.message;
+      });
+    </script>
+  </body>
+</html>

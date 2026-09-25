@@ -1,0 +1,44 @@
+{
+  "recordedAt": "2026-09-12T17:13+08:00",
+  "machine": "local-mac",
+  "codexDesktop": {
+    "expectedPath": "/Applications/Codex.app",
+    "expectedPathPresent": false,
+    "actualBundlePath": "/Applications/ChatGPT.app",
+    "actualBundleName": "ChatGPT.app",
+    "cfBundleIdentifier": "com.openai.codex",
+    "cfBundleShortVersionString": "26.908.40834",
+    "cfBundleVersion": "8881",
+    "teamIdentifier": "2DC432GLL2",
+    "cdHashSha256": "66d1d185c8870f38e19fb698b031fe9d9ba2afb7",
+    "infoPlistSha256": "92c535a34a8c1ba08e9fa1825807f348348c2f5c13a9e2e822098e75ed279e0b",
+    "executableSha256": "83750779e2f5a040cc05f6b05486e3bfa371ff19cb9edcd6102140b369c67683",
+    "electronAsarPresent": true,
+    "note": "OpenAI ships Codex Desktop under ChatGPT.app with bundle id com.openai.codex. Explodex docs still look for /Applications/Codex.app."
+  },
+  "codexCliHomebrew": {
+    "path": "/opt/homebrew/bin/Codex",
+    "cask": "codex",
+    "brewInfoVersion": "0.154.0",
+    "installedCaskroomPath": "/opt/homebrew/Caskroom/codex/0.145.0/codex-aarch64-apple-darwin",
+    "note": "This is the terminal CLI, not the Desktop UI."
+  },
+  "explodex": {
+    "github": "https://github.com/dan-dr/explodex",
+    "npm": "explodex@0.2.2",
+    "npmGitHead": "7acf4ec358a7bb9b8483960bc6d833acc7a4e404",
+    "githubMain": "ab0aeab4299bf1dc8da94ebd9abe77a0f8c771ac",
+    "sdkVersionDocumented": "1.2.0",
+    "cliInstalled": false,
+    "homebrewFormula": false,
+    "userClone": false,
+    "launcherApp": false,
+    "applicationSupport": false,
+    "dotExplodex": false,
+    "injectedThisSession": false
+  },
+  "navigator": {
+    "applicationSupportCreatedOnInit": "~/Library/Application Support/CodexNavigator/",
+    "storesConversationBody": false
+  }
+}

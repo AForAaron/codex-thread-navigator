@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.DS_Store
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.env
+.env.*
+backups/*/
+!backups/BACKUP_MANIFEST.md
+!backups/LATEST.txt
+
+# local Claude Code harness state (permissions etc.) — never commit
+.claude/

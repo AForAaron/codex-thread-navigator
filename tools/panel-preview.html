@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>Codex Navigator 预览（不是 Codex Desktop）</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <style>
+      html, body, #app { margin: 0; height: 100%; overflow: hidden; background: #212121; color: #ececec; font: 14px/1.45 system-ui, sans-serif; }
+      .cn-boot { padding: 16px 20px; }
+      .cn-boot-note { opacity: 0.7; font-size: 12px; margin: 0 0 12px; }
+      .cn-boot-grid { display: grid; grid-template-columns: 1fr 320px; gap: 16px; min-height: 70vh; }
+      .cn-boot-main, .cn-boot-side { border: 1px dashed #444; border-radius: 10px; padding: 16px; }
+      .cn-boot-side { opacity: 0.85; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div class="cn-boot">
+        <p class="cn-boot-note">预览：左侧对话条 + 中间对话 + 底部输入。不是 ChatGPT.app。</p>
+        <div class="cn-boot-grid">
+          <div class="cn-boot-main">中间是假对话，仅供 e2e。</div>
+          <div class="cn-boot-side">右侧 Navigator 开发面板。</div>
+        </div>
+      </div>
+    </div>
+    <script>
+      window.addEventListener("error", (event) => {
+        const app = document.getElementById("app");
+        if (!app || app.querySelector("[data-codex-navigator]")) return;
+        app.textContent = "预览脚本出错：" + (event.message || "unknown") + "。请运行 npm run preview 后强制刷新 ⌘⇧R。";
+      });
+    </script>
+    <script src="/dist/preview/preview.js?v=progress-dots" onerror="document.getElementById('app').textContent='preview.js 没加载到。请在仓库里运行 npm run preview，然后打开 http://127.0.0.1:8765/tools/panel-preview.html 并强制刷新 ⌘⇧R。'"></script>
+  </body>
+</html>
