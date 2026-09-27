@@ -1,6 +1,8 @@
 export const THREAD_MAIN = "thread_preview_nav_001";
 export const THREAD_OUTLINE = "thread_preview_outline_001";
 export const THREAD_STRESS = "thread_preview_stress_001";
+export const THREAD_STRESS_500 = "thread_preview_stress_500";
+export const THREAD_STRESS_1000 = "thread_preview_stress_1000";
 export const THREAD_ORPHAN = "thread_preview_orphan_001";
 
 export const PREVIEW_THREAD_ID = THREAD_MAIN;
@@ -188,9 +190,9 @@ export function buildOutlineFixture(): PreviewFixture {
   };
 }
 
-export function buildStressFixture(): PreviewFixture {
+export function buildStressFixture(count = 90, threadId = THREAD_STRESS): PreviewFixture {
   const blocks: PreviewBlock[] = [];
-  for (let i = 1; i <= 90; i++) {
+  for (let i = 1; i <= count; i++) {
     blocks.push({
       role: "user",
       turnId: `turn_u_${pad(i)}`,
@@ -206,7 +208,7 @@ export function buildStressFixture(): PreviewFixture {
       body: `这是第 ${pad(i)} 轮的简短回复，仅用于长会话压力测试。`,
     });
   }
-  return { threadId: THREAD_STRESS, title: "长会话压力（开发）", blocks };
+  return { threadId, title: `长会话压力 ${count} 轮（开发）`, blocks };
 }
 
 export function buildOrphanFixture(): PreviewFixture {
@@ -236,6 +238,8 @@ export const PREVIEW_FIXTURES: Record<string, PreviewFixture> = {
   [THREAD_MAIN]: buildMainFixture(),
   [THREAD_OUTLINE]: buildOutlineFixture(),
   [THREAD_STRESS]: buildStressFixture(),
+  [THREAD_STRESS_500]: buildStressFixture(500, THREAD_STRESS_500),
+  [THREAD_STRESS_1000]: buildStressFixture(1000, THREAD_STRESS_1000),
   [THREAD_ORPHAN]: buildOrphanFixture(),
 };
 
@@ -249,6 +253,8 @@ export function defaultCatalog(): ThreadCatalogEntry[] {
     { threadId: THREAD_MAIN, title: PREVIEW_FIXTURES[THREAD_MAIN]!.title, live: true },
     { threadId: THREAD_OUTLINE, title: PREVIEW_FIXTURES[THREAD_OUTLINE]!.title, live: true },
     { threadId: THREAD_STRESS, title: PREVIEW_FIXTURES[THREAD_STRESS]!.title, live: true },
+    { threadId: THREAD_STRESS_500, title: PREVIEW_FIXTURES[THREAD_STRESS_500]!.title, live: true },
+    { threadId: THREAD_STRESS_1000, title: PREVIEW_FIXTURES[THREAD_STRESS_1000]!.title, live: true },
     { threadId: THREAD_ORPHAN, title: PREVIEW_FIXTURES[THREAD_ORPHAN]!.title, live: true },
   ];
 }

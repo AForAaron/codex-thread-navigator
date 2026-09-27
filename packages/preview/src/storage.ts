@@ -54,10 +54,19 @@ export function sanitizeAnchor(input: ReadingAnchor): ReadingAnchor {
     blockHash: input.blockHash,
     contentHash: input.contentHash,
     offset: input.offset,
+    blockIndex: input.blockIndex,
+    viewportOffset: input.viewportOffset,
+    following: input.following,
   };
 }
 
 export class PreviewIndexStorage {
+  private readonly windowId: string;
+  constructor() {
+    // A tab's session survives reload; independent tabs keep independent active anchors.
+    this.windowId = sessionStorage.getItem(key("window")) ?? crypto.randomUUID();
+    sessionStorage.setItem(key("window"), this.windowId);
+  }
   loadPrefs(): PreviewPrefs {
     const raw = readJson<Partial<PreviewPrefs>>("prefs", {});
     return {
@@ -72,15 +81,19 @@ export class PreviewIndexStorage {
   }
 
   loadAnchor(threadId: string): ReadingAnchor | null {
-    const map = readJson<Record<string, ReadingAnchor>>("anchors", {});
-    const saved = map[threadId];
+    const map = readJson<Record<string, ReadingAnchor>>(`anchors:${this.windowId}`, {});
+    const saved = map[threadId] ?? readJson<Record<string, ReadingAnchor>>("anchors", {})[threadId];
     return saved ? sanitizeAnchor(saved) : null;
   }
 
   saveAnchor(anchor: ReadingAnchor): void {
-    const map = readJson<Record<string, ReadingAnchor>>("anchors", {});
+    const map = readJson<Record<string, ReadingAnchor>>(`anchors:${this.windowId}`, {});
     map[anchor.threadId] = sanitizeAnchor(anchor);
-    writeJson("anchors", map);
+    writeJson(`anchors:${this.windowId}`, map);
+    // Last saved anchors provide a fallback for a genuinely new session / legacy v2 data.
+    const last = readJson<Record<string, ReadingAnchor>>("anchors", {});
+    last[anchor.threadId] = sanitizeAnchor(anchor);
+    writeJson("anchors", last);
   }
 
   listAllBookmarks(): BookmarkIndex[] {

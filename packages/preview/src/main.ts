@@ -2,7 +2,7 @@ import { createCodexCurrentAdapter } from "../../core/src/adapters/codex-current
 import type { DomAdapter } from "../../core/src/adapters/types.ts";
 import { bookmarkId, preferBookmarkKind, type BookmarkIndex, type BookmarkKind } from "../../core/src/bookmarks/types.ts";
 import { exportForbiddenKeys } from "../../core/src/export/export.ts";
-import { compensateScroll, distanceFromBottom, reduceFollow, type FollowState } from "../../core/src/follow/follow.ts";
+import { reduceFollow, type FollowState } from "../../core/src/follow/follow.ts";
 import {
   PREVIEW_DEFAULT_SHORTCUTS,
   isEditableTarget,
@@ -11,9 +11,8 @@ import {
   type ShortcutId,
 } from "../../core/src/keymap/shortcuts.ts";
 import { extractHeadings, type OutlineHeading } from "../../core/src/outline/headings.ts";
-import { restoreReadingPosition } from "../../core/src/reading/restore.ts";
-import type { ReadingAnchor } from "../../core/src/reading/types.ts";
-import { searchTurns } from "../../core/src/search/search.ts";
+import { ReadingViewport, currentPrompt, messageText } from "./reading-viewport.ts";
+import { searchTurns, type SearchableTurn } from "../../core/src/search/search.ts";
 import { createNavigatorPanel, NAVIGATOR_PANEL_CSS } from "../../plugin/src/ui/navigator-panel.ts";
 import {
   PREVIEW_FIXTURES,
@@ -60,7 +59,7 @@ html[data-theme="light"] .preview-shell { background: #fff; }
 .preview-mini-pop .cn-cap { display: block; color: #8a8a8a; font-weight: 400; }
 .preview-thread-host { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; position: relative; }
 .preview-scroll-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
-.app-shell-main-content-viewport { flex: 1; min-height: 0; height: 100%; overflow: auto; padding: 8px 28px 24px; scrollbar-width: none; }
+.app-shell-main-content-viewport { flex: 1; min-height: 0; height: 100%; overflow: auto; padding: 8px 52px 24px; scrollbar-width: none; }
 .app-shell-main-content-viewport::-webkit-scrollbar { width: 0; height: 0; }
 .app-shell-main-content-viewport > h1 { font-size: 18px; font-weight: 600; margin: 12px 0 16px; }
 .preview-turn { margin: 12px 0; padding: 10px 12px; border-radius: 12px; max-width: 46rem; }
@@ -91,6 +90,14 @@ html[data-theme="light"] .preview-turn.cn-current { background: #eee; }
   border: 1px solid #3d3d3d; border-radius: 12px; min-height: 44px; padding: 10px 12px;
   background: #2f2f2f; color: #8a8a8a;
 }
+.cn-search-tray { position:absolute; right:16px; top:38px; width:min(380px,calc(100vw - 32px)); max-height:65vh; overflow:auto; z-index:30; padding:12px; background:var(--cn-surface,#171717); border:1px solid #555; border-radius:12px; }
+.cn-search-tray[hidden] { display:none; }
+.cn-search-tray input { box-sizing:border-box; width:100%; padding:8px; background:transparent; color:inherit; border:1px solid #777; border-radius:6px; }
+.cn-search-tray button { display:block; width:100%; padding:8px; color:inherit; text-align:left; border:0; background:transparent; cursor:pointer; }
+.cn-search-tray button:hover, .cn-search-tray button:focus-visible { background:#5553; }
+.cn-search-coverage { font-size:12px; opacity:.8; margin:8px 0; }
+.preview-search-button { font:inherit; color:inherit; background:transparent; border:1px solid #777; border-radius:6px; padding:4px 10px; cursor:pointer; }
+html[data-theme=light] .cn-search-tray { background:#fff; color:#111; }
 ${THREAD_RAIL_CSS}
 ${PROGRESS_RAIL_CSS}
 ${NAVIGATOR_PANEL_CSS}
@@ -119,7 +126,7 @@ function visibleTurn(viewport: HTMLElement, testId?: string): HTMLElement | null
 }
 
 function currentUserFromIO(viewport: HTMLElement): string | null {
-  return visibleTurn(viewport, "user-message")?.dataset.turnId ?? null;
+  return currentPrompt(viewport);
 }
 
 function visibleHeadingId(viewport: HTMLElement): string | null {
@@ -133,14 +140,6 @@ function visibleHeadingId(viewport: HTMLElement): string | null {
     if (!best || dist < best.dist) best = { id: node.id, dist };
   }
   return best?.id ?? null;
-}
-
-function debounce(fn: () => void, ms: number): () => void {
-  let timer = 0;
-  return () => {
-    window.clearTimeout(timer);
-    timer = window.setTimeout(fn, ms);
-  };
 }
 
 function applyTheme(theme: "system" | "light" | "dark"): void {
@@ -193,12 +192,14 @@ async function main(): Promise<void> {
   let viewport!: HTMLElement;
   let adapter = makeAdapter(currentThreadId);
   let gen = 0;
-  let lastScrollTop = 0;
+  let reading: ReadingViewport | null = null;
+  let mountAbort = new AbortController();
+  let mountGeneration = 0;
+  let searchCache: SearchableTurn[] | null = null;
   let follow: FollowState = { following: true, unreadNew: false };
   let bindings = applyShortcutOverrides(PREVIEW_DEFAULT_SHORTCUTS, prefs.shortcutOverrides, parseShortcut);
   let outlineCount = 0;
   let lastExportLeaks: string[] = [];
-  let observer: MutationObserver | null = null;
 
   const shell = document.createElement("div");
   shell.className = "preview-shell";
@@ -243,7 +244,35 @@ async function main(): Promise<void> {
   const miniWrap = document.createElement("div");
   miniWrap.style.position = "relative";
   miniWrap.append(miniGear, miniPop);
-  topbar.append(banner, miniWrap);
+  const searchButton = document.createElement("button");
+  searchButton.type = "button"; searchButton.textContent = "搜索对话";
+  searchButton.className = "preview-search-button";
+  searchButton.dataset.cn = "open-search";
+  const searchTray = document.createElement("section");
+  searchTray.className = "cn-search-tray"; searchTray.hidden = true;
+  searchTray.setAttribute("aria-label", "当前整条对话搜索");
+  const trayInput = document.createElement("input");
+  trayInput.type = "search"; trayInput.placeholder = "搜索当前整条对话";
+  trayInput.setAttribute("aria-label", "关键词"); trayInput.dataset.cn = "full-search";
+  const coverage = document.createElement("p"); coverage.className = "cn-search-coverage";
+  const results = document.createElement("div"); results.dataset.cn = "full-search-results";
+  const closeSearch = document.createElement("button"); closeSearch.type = "button";
+  closeSearch.textContent = "关闭搜索";
+  closeSearch.addEventListener("click", () => { searchTray.hidden = true; searchButton.focus(); });
+  searchTray.append(trayInput, coverage, results, closeSearch);
+  searchButton.addEventListener("click", () => { searchTray.hidden = false; trayInput.focus(); runSearch(trayInput.value); });
+  trayInput.addEventListener("input", () => runSearch(trayInput.value));
+  trayInput.addEventListener("keydown", event => {
+    if (event.key === "ArrowDown") { event.preventDefault(); results.querySelector<HTMLButtonElement>("button")?.focus(); }
+  });
+  results.addEventListener("keydown", event => {
+    const buttons = [...results.querySelectorAll<HTMLButtonElement>("button")];
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      event.preventDefault(); buttons[Math.max(0, Math.min(buttons.length - 1, index + (event.key === "ArrowDown" ? 1 : -1)))]?.focus();
+    }
+  });
+  topbar.append(banner, searchButton, miniWrap, searchTray);
   const quota = document.createElement("div");
   quota.className = "cn-quota";
   quota.dataset.cn = "quota-bar";
@@ -314,10 +343,10 @@ async function main(): Promise<void> {
     onOutlineClick: (row) => jumpHeading(row),
     onSearch: (query) => runSearch(query),
     onSearchHit: (hit) => {
-      jumpTo(hit.turnId);
-      const node = viewport.querySelector(`[data-turn-id="${hit.turnId}"]`);
-      node?.classList.add("cn-hit");
-      window.setTimeout(() => node?.classList.remove("cn-hit"), 1200);
+      if (reading?.revealHit(hit)) {
+        panel.setStatus(`命中 ${hit.role} · ${hit.turnId}`);
+        publishState();
+      }
     },
     onThreadChange: (threadId) => void switchThread(threadId),
     onAutoRestoreChange: (enabled) => {
@@ -443,6 +472,8 @@ async function main(): Promise<void> {
       status: panel.root.dataset.cnStatus ?? "",
       threadId: currentThreadId,
       follow,
+      readingMode: reading?.mode,
+      readingAnchor: reading?.capture(),
       outlineCount,
       autoRestore: prefs.autoRestore,
       theme: prefs.theme,
@@ -489,7 +520,9 @@ async function main(): Promise<void> {
     rail.setVisible(f.conversationRail);
     progress.setVisible(f.conversationProgress);
     quota.hidden = !f.quotaBar;
-    const navOn = f.promptNavigator || f.answerOutline || f.bookmarks || f.search;
+    const navOn = f.promptNavigator || f.answerOutline || f.bookmarks;
+    searchButton.hidden = !f.search;
+    if (!f.search) searchTray.hidden = true;
     side.hidden = !navOn;
     if (!navOn) {
       panel.setVisible(false);
@@ -506,20 +539,8 @@ async function main(): Promise<void> {
     publishState();
   }
 
-  function persistFromTurn(turnId: string): void {
-    if (!prefs.features.readingRestore) return;
-    if (!turnId) return;
-    const item = adapter.getScannedPrompts().find((row) => row.turnId === turnId);
-    const anchor: ReadingAnchor = {
-      threadId: currentThreadId,
-      turnId: item?.turnId ?? turnId,
-      itemId: item?.itemId,
-      itemIndex: item?.itemIndex,
-      blockHash: item?.blockHash,
-      contentHash: item?.contentHash,
-      offset: viewport.scrollTop,
-    };
-    storage.saveAnchor(anchor);
+  function persistFromTurn(_turnId: string): void {
+    if (prefs.features.readingRestore) reading?.flush();
   }
 
   function markCurrent(turnId: string): void {
@@ -529,7 +550,9 @@ async function main(): Promise<void> {
   }
 
   function jumpTo(turnId: string): void {
-    adapter.jumpToPrompt({ turnId });
+    const node = [...viewport.querySelectorAll<HTMLElement>('[data-testid="user-message"]')].find(node => node.dataset.turnId === turnId);
+    if (!node || !reading) return;
+    reading.jump(node);
     panel.setActiveTurn(turnId);
     persistFromTurn(turnId);
     markCurrent(turnId);
@@ -541,7 +564,8 @@ async function main(): Promise<void> {
   }
 
   function jumpHeading(row: OutlineHeading): void {
-    document.getElementById(row.id)?.scrollIntoView({ block: "start" });
+    const node = document.getElementById(row.id);
+    if (node) reading?.jump(node);
     panel.setActiveTurn(row.turnId);
     persistFromTurn(currentUserFromIO(viewport) ?? row.turnId);
     follow = { following: false, unreadNew: follow.unreadNew };
@@ -553,9 +577,11 @@ async function main(): Promise<void> {
 
   function jumpBookmark(row: BookmarkIndex): void {
     if (row.headingId) {
-      document.getElementById(row.headingId)?.scrollIntoView({ block: "start" });
+      const node = document.getElementById(row.headingId);
+      if (node) reading?.jump(node);
     } else {
-      adapter.jumpToPrompt({ turnId: row.turnId, itemId: row.itemId });
+      const node = [...viewport.querySelectorAll<HTMLElement>(".preview-turn")].find(node => row.itemId ? node.dataset.itemId === row.itemId : node.dataset.turnId === row.turnId);
+      if (node) reading?.jump(node);
     }
     panel.setActiveTurn(row.turnId);
     panel.setStatus(`Bookmark → ${row.kind} ${row.title}`);
@@ -575,7 +601,7 @@ async function main(): Promise<void> {
 
   function jumpLatest(): void {
     const lastUser = [...viewport.querySelectorAll<HTMLElement>('[data-testid="user-message"]')].at(-1);
-    lastUser?.scrollIntoView({ block: "start" });
+    reading?.latest();
     const turnId = lastUser?.dataset.turnId ?? PREVIEW_LAST_USER_TURN;
     panel.setActiveTurn(turnId);
     persistFromTurn(turnId);
@@ -589,7 +615,7 @@ async function main(): Promise<void> {
 
   function jumpNewest(): void {
     const lastAny = [...viewport.querySelectorAll<HTMLElement>(".preview-turn")].at(-1);
-    lastAny?.scrollIntoView({ block: "start" });
+    reading?.latest();
     const turnId = lastAny?.dataset.turnId ?? PREVIEW_LAST_USER_TURN;
     panel.setActiveTurn(turnId);
     persistFromTurn(currentUserFromIO(viewport) ?? turnId);
@@ -654,8 +680,10 @@ async function main(): Promise<void> {
   }
 
   async function refreshPromptsStars(): Promise<void> {
-    const listed = await adapter.listUserPrompts();
-    if (!listed.ok) return;
+    const activeAdapter = adapter;
+    const generation = mountGeneration;
+    const listed = await activeAdapter.listUserPrompts();
+    if (!listed.ok || activeAdapter !== adapter || generation !== mountGeneration) return;
     const stars = new Set(storage.listBookmarks(currentThreadId).map((row) => row.turnId));
     panel.setPrompts(
       listed.value.map((row) => ({
@@ -682,13 +710,22 @@ async function main(): Promise<void> {
   }
 
   function runSearch(query: string): void {
-    const turns = [...viewport.querySelectorAll<HTMLElement>(".preview-turn")].map((node) => ({
+    const turns = searchCache ??= [...viewport.querySelectorAll<HTMLElement>(".preview-turn")].map((node) => ({
       turnId: node.dataset.turnId ?? "",
       itemId: node.dataset.itemId,
       role: (node.dataset.role as "user" | "assistant") ?? "assistant",
-      text: node.innerText,
+      text: messageText(node),
     }));
-    panel.setSearchHits(searchTurns(turns, query));
+    const hits = searchTurns(turns, query, Number.MAX_SAFE_INTEGER);
+    panel.setSearchHits(hits);
+    coverage.textContent = `当前完整预览对话 · ${hits.length} 处匹配（真实窗口尚未接入）`;
+    results.replaceChildren();
+    for (const hit of hits) {
+      const button = document.createElement("button"); button.type = "button";
+      button.textContent = hit.snippet; button.dataset.itemId = hit.itemId;
+      button.addEventListener("click", () => reading?.revealHit(hit));
+      results.append(button);
+    }
     publishState();
   }
 
@@ -709,34 +746,18 @@ async function main(): Promise<void> {
       return;
     }
     const saved = storage.loadAnchor(currentThreadId);
-    const scanned = adapter.getScannedPrompts();
-    if (!saved) {
-      panel.setStatus(`User Prompts ${scanned.length} · 无已存锚点`);
-      publishState();
-      return;
-    }
-    const restored = restoreReadingPosition(saved, scanned);
-    if (!restored.ok) {
-      panel.setStatus("锚点无法恢复");
-      publishState();
-      return;
-    }
-    adapter.jumpToPrompt({
-      turnId: restored.candidate.turnId,
-      itemId: restored.candidate.itemId,
-      itemIndex: restored.candidate.itemIndex,
-      blockHash: restored.candidate.blockHash,
-    });
-    if (typeof saved.offset === "number") viewport.scrollTop = saved.offset;
-    panel.setActiveTurn(restored.candidate.turnId);
-    markCurrent(restored.candidate.turnId);
-    panel.setStatus(`已恢复 ${restored.tier} · ${restored.candidate.turnId}`);
+    if (!saved) { panel.setStatus("无已存阅读锚点"); return; }
+    if (!reading?.restore(saved)) { panel.setStatus("原阅读内容已不可用，未跳转"); return; }
+    panel.setStatus(`已恢复内容锚点 · ${saved.turnId}`);
     refreshOutline();
     publishState();
   }
 
   async function refreshPrompts(): Promise<void> {
-    const listed = await adapter.listUserPrompts();
+    const activeAdapter = adapter;
+    const generation = mountGeneration;
+    const listed = await activeAdapter.listUserPrompts();
+    if (activeAdapter !== adapter || generation !== mountGeneration) return;
     if (!listed.ok) {
       panel.setPrompts([], listed.message);
       panel.setStatus(listed.message);
@@ -757,70 +778,36 @@ async function main(): Promise<void> {
   }
 
   function bindViewport(): void {
-    observer?.disconnect();
-    lastScrollTop = viewport.scrollTop;
-    let prevHeight = viewport.scrollHeight;
-    let prevTop = viewport.scrollTop;
-    observer = new MutationObserver(() => {
-      if (prefs.features.viewportLock) {
-        const next = compensateScroll({
-          following: follow.following,
-          previousScrollTop: prevTop,
-          previousHeight: prevHeight,
-          nextHeight: viewport.scrollHeight,
-        });
-        viewport.scrollTop = next.scrollTop;
-      }
-      follow = reduceFollow(follow, {
-        type: "contentAppended",
-        distanceFromBottom: distanceFromBottom(viewport.scrollTop, viewport.scrollHeight, viewport.clientHeight),
-      });
-      panel.setFollow(follow.following, follow.unreadNew);
-      syncLock();
-      prevHeight = viewport.scrollHeight;
-      prevTop = viewport.scrollTop;
-      panel.setStatus(follow.unreadNew ? "已生成新块（视口未拉走）" : "已生成并跟随");
-      progress.sync();
-      publishState();
-    });
-    observer.observe(viewport, { childList: true, subtree: false });
-
-    const onScrollIdle = debounce(() => {
-      const turnId = currentUserFromIO(viewport);
-      if (turnId) {
-        panel.setActiveTurn(turnId);
-        persistFromTurn(turnId);
-        markCurrent(turnId);
-      }
-      refreshOutline();
-      publishState();
-    }, 360);
-    viewport.addEventListener("scroll", () => {
-      const deltaY = viewport.scrollTop - lastScrollTop;
-      lastScrollTop = viewport.scrollTop;
-      prevTop = viewport.scrollTop;
-      prevHeight = viewport.scrollHeight;
-      follow = reduceFollow(follow, {
-        type: "scroll",
-        distanceFromBottom: distanceFromBottom(viewport.scrollTop, viewport.scrollHeight, viewport.clientHeight),
-        deltaY,
-      });
-      panel.setFollow(follow.following, follow.unreadNew);
-      syncLock();
-      const turnId = currentUserFromIO(viewport);
-      if (turnId) {
-        panel.setActiveTurn(turnId);
-        markCurrent(turnId);
-      }
-      progress.sync();
-      onScrollIdle();
+    reading = new ReadingViewport(viewport, currentThreadId, {
+      stable: () => prefs.features.viewportLock,
+      save: anchor => { if (prefs.features.readingRestore) storage.saveAnchor(anchor); },
+      change: (contentChanged) => {
+        follow = { following: reading?.mode === "FOLLOWING", unreadNew: reading?.unread ?? false };
+        const turn = currentUserFromIO(viewport);
+        panel.setActiveTurn(turn); if (turn) markCurrent(turn);
+        panel.setFollow(follow.following, follow.unreadNew);
+        progress.sync(); refreshOutline();
+        if (contentChanged) {
+          searchCache = null;
+          progress.refresh();
+          if (panel.searchInput.value) runSearch(panel.searchInput.value);
+          else if (trayInput.value) runSearch(trayInput.value);
+        }
+        publishState();
+      },
     });
     progress.attach(viewport);
-    progress.sync();
   }
 
   async function mountThread(): Promise<void> {
-    viewport = await renderPreviewThread(scrollPane, PREVIEW_FIXTURES[currentThreadId]!);
+    mountAbort.abort(); mountAbort = new AbortController();
+    const generation = ++mountGeneration;
+    const threadId = currentThreadId;
+    reading?.dispose(); reading = null;
+    const nextViewport = await renderPreviewThread(scrollPane, PREVIEW_FIXTURES[threadId]!, mountAbort.signal);
+    if (generation !== mountGeneration) return;
+    viewport = nextViewport;
+    searchCache = null;
     viewport.style.flex = "1";
     viewport.style.minHeight = "0";
     adapter = makeAdapter(currentThreadId);
@@ -833,6 +820,7 @@ async function main(): Promise<void> {
     syncLock();
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
+        if (generation !== mountGeneration) return;
         restoreSaved();
         progress.sync();
       }),
@@ -841,7 +829,9 @@ async function main(): Promise<void> {
 
   async function switchThread(threadId: string): Promise<void> {
     persistFromTurn(currentUserFromIO(viewport) ?? panel.root.dataset.activeTurn ?? "");
+    reading?.dispose(); reading = null;
     currentThreadId = threadId;
+    panel.searchInput.value = ""; trayInput.value = ""; results.replaceChildren();
     rail.setActive(threadId);
     await mountThread();
   }
@@ -850,9 +840,11 @@ async function main(): Promise<void> {
   loadQuota();
   window.setInterval(loadQuota, 45000);
   await mountThread();
+  window.addEventListener("pagehide", () => reading?.flush());
 
   window.addEventListener("keydown", (event) => {
     if (!prefs.features.keyboardShortcuts) return;
+    if (event.key === "Escape" && !searchTray.hidden) { searchTray.hidden = true; searchButton.focus(); return; }
     if (isEditableTarget(event.target) && event.key !== "Escape") return;
     const hit = matchPreviewShortcut(event, bindings);
     if (!hit) return;
@@ -879,7 +871,8 @@ async function main(): Promise<void> {
     }
     if (hit.id === "search") {
       if (!prefs.features.search) return;
-      panel.focusSearch();
+      if (!side.hidden) panel.focusSearch();
+      else { searchTray.hidden = false; trayInput.focus(); runSearch(trayInput.value); }
       publishState();
       return;
     }

@@ -64,3 +64,19 @@
 - 读取本地 Explodex `lib/platform/macos.mjs` 确认，`CODEX_APP` 和 `CODEX_BIN` 固定为 `/Applications/Codex.app` 及其 MacOS/Codex 可执行文件；不是仅 README 写错，现有打包运行代码也不适配本机路径。未运行该模块。
 - 增加 `npm run g0:check`，只执行应用元数据、签名及既定路径存在性检查，不启动应用、不访问 UI、不注入、不修复。失败返回 exit 2；通过这些机器检查也不会宣称 G0 通过，报告始终保留真实界面证据要求。
 - 因此目前没有一个已验证、可直接提交安装申请并满足双界面目标的工具方案；不以全局安装 Explodex 或创建 Codex.app 别名代替兼容性验证。
+
+## 原生组件静态证据补充
+
+用户明确提出读取原生 UI 组件后，只读解析 app.asar 的文件索引并在内存读取指定前端文件；没有运行其中代码，没有修改、重打包或重签名应用，没有连接运行中的应用或绕过 UI 工具禁令。
+
+已定位当前安装包的资源：
+
+- `webview/assets/thread-user-message-navigation-rail-app-9f5cc9282f4d.js`（31,947 bytes）。
+- `webview/assets/thread-user-message-navigation-rail-app-4265c73f61aa.css`（4,382 bytes）。
+- `webview/assets/bookmarked-thread-user-message-navigation-66b382dced83.js`（5,679 bytes）。
+
+原生静态实现显示：独立 marker 基准宽 26px，默认缩放约 0.2308；悬停/焦点目标展开至 1，相邻一、二、三项分别以 0.7、0.4、0.2 进度展开；使用 aria-current 标识当前项；常规动画 0.16s，scrubbing 和 reduced-motion 条件禁用相应过渡。带有指针交互、预览加载/不可用状态、ResizeObserver，以及通过 onRevealItem 加载历史目标再滚动定位的路径。
+
+因此“拿不到原生实现证据”的旧结论已被本次静态检查纠正：可以从打包组件取得结构、样式和交互逻辑证据。没有发现随包提供的 .map 文件，当前读到的是编译后组件，不是原始 TSX/Figma。仍需解析共享依赖和实际挂载入口；没有验证当前窗口是否启用该组件及最终布局/双主题表现。签名失败意味着这些证据准确描述本机当前包的内容，不能额外证明其为未改动的官方发行件。
+
+静态组件证据不等同于真实挂载权限，也不证明两个界面的完整历史加载和恢复闭环已通过；G0 总体状态仍未通过，但原生设计证据取得工作可继续通过静态阅读推进。

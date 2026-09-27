@@ -8,7 +8,7 @@ Codex Desktop **长对话导航增强**。不是主题、不是 launcher、不�
 
 落地标准：真实 Thread/Turn 锚点、阅读恢复、书签。本机索引页读 `~/.codex/thread_history_*.sqlite` 的 id，写入 `navigator.sqlite`。官方 ChatGPT 窗口里点目录**还不会滚动**（未注入 Explodex）。假对话预览只留给开发：`/tools/panel-preview.html`。
 
-预览视觉按 Material 3 Expressive 排版（圆角色面、层次、Roboto Flex）。[m3e-canvas](https://github.com/lnkiai/m3e-canvas) 是独立的 Next.js 画板编辑器，**不能当组件库引入**；本预览用其设计语言自研 CSS，未嵌入该仓库。
+预览采用 Codex 相邻的系统字体与灰阶界面。目录条依据本机原生组件的静态证据独立复刻：逐条横线、悬停相邻展开、预览和点击定位；阅读控制与搜索在独立预览内验证。实现及真实窗口接入边界见 [docs/NATIVE_NAVIGATION_IMPLEMENTATION.md](docs/NATIVE_NAVIGATION_IMPLEMENTATION.md)。
 
 ## 红线
 

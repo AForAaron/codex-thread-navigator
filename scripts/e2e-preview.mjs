@@ -154,14 +154,14 @@ try {
   const progressVis = await page.evaluate(() => {
     const rail = document.querySelector("[data-cn='conversation-progress']");
     const track = document.querySelector("[data-cn='conversation-progress-track']");
-    const current = document.querySelector("[data-cn='conversation-progress-current']");
+    const current = document.querySelector(".cn-progress-item[aria-current=true] .cn-progress-marker");
     const nav = document.querySelector("[data-codex-navigator]");
     const navVisible = Boolean(nav && !nav.hidden && (nav.getBoundingClientRect().width ?? 0) > 40);
     const trackBg = track ? getComputedStyle(track).backgroundImage : "";
     const currentBox = current?.getBoundingClientRect();
     return {
       exists: Boolean(rail && !rail.hidden && track),
-      dotted: /repeating-linear-gradient/i.test(trackBg),
+      dotted: !/repeating-linear-gradient/i.test(trackBg) && track?.querySelectorAll(".cn-progress-item").length === 16,
       currentThin: Boolean(currentBox && currentBox.width > currentBox.height && currentBox.height <= 4),
       rightPanel: navVisible,
       previewOpen: rail?.dataset.previewOpen === "true",
@@ -177,16 +177,16 @@ try {
   await page.waitForTimeout(200);
   const hoverA = await page.evaluate(() => {
     const preview = document.querySelector("[data-cn='conversation-progress-preview']");
-    const bar = document.querySelector("[data-cn='conversation-progress-bar']");
+    const bar = document.querySelector(".cn-progress-item[data-scrub-target] .cn-progress-marker");
     const rail = document.querySelector("[data-cn='conversation-progress']");
     const style = preview ? getComputedStyle(preview) : null;
     const barBox = bar?.getBoundingClientRect();
-    const currentBox = document.querySelector("[data-cn='conversation-progress-current']")?.getBoundingClientRect();
+    const currentBox = document.querySelector(".cn-progress-item:not([data-scrub-target]) .cn-progress-marker")?.getBoundingClientRect();
     return {
       previewVisible: Boolean(preview && !preview.hidden && style?.display !== "none"),
       barVisible: Boolean(bar && !bar.hidden),
       barHorizontal: Boolean(barBox && barBox.width > barBox.height),
-      barThicker: Boolean(barBox && currentBox && barBox.height > currentBox.height + 1),
+      barThicker: Boolean(barBox && currentBox && barBox.width >= 25 && barBox.height === 2 && currentBox.width < barBox.width),
       text: preview?.textContent ?? "",
       turn: rail?.dataset.hoverTurn ?? "",
     };
@@ -217,7 +217,7 @@ try {
   }));
   record(
     "1e-progress-click",
-    afterClick.scrollTop > beforeJump + 40 || afterClick.active === afterClick.hoverTurn || String(afterClick.active).startsWith("turn_u_"),
+    afterClick.active === afterClick.hoverTurn,
     `before=${beforeJump} after=${afterClick.scrollTop} active=${afterClick.active}`,
   );
 
@@ -391,7 +391,7 @@ try {
   const outlineActive = (await state(page))?.activeTurn;
   record(
     "7e-outline-search",
-    outlineActive === "turn_a_outline" || outlineActive === "turn_u_outline",
+    await page.locator('[data-turn-id="turn_a_outline"][data-search-match]').count() === 1,
     `active=${outlineActive}`,
   );
 

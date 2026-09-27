@@ -624,4 +624,7 @@ html[data-theme="light"] .codex-navigator {
   --cn-surface: #f7f7f8; --cn-surface-high: #f7f7f8; --cn-surface-highest: #ececec;
   --cn-outline: #e5e5e5; --cn-on-surface: #111; --cn-on-variant: #6b6b6b;
 }
+html[data-theme="light"] .codex-navigator :is(.cn-btn,.cn-search-field,.cn-select,.cn-field,.cn-kbd) { background:#fff; }
+html[data-theme="light"] .codex-navigator :is(.cn-list li:hover,.cn-list li.cn-active,.cn-gear[aria-pressed="true"]) { background:#e5e5e5; }
+html[data-theme="light"] .cn-tabs button[aria-selected="true"] { box-shadow:inset 0 -1px 0 #111; }
 `;

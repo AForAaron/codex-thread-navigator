@@ -8,6 +8,10 @@ export interface ReadingAnchor {
   blockHash?: string;
   contentHash?: string;
   offset?: number;
+  /** v3: position within a message, relative to the viewport (never absolute scrollTop). */
+  blockIndex?: number;
+  viewportOffset?: number;
+  following?: boolean;
 }
 
 export interface RestoreCandidate {

@@ -24,7 +24,7 @@ export const FEATURE_DEFAULTS: FeatureFlags = {
   bookmarks: false,
   readingRestore: true,
   viewportLock: true,
-  search: false,
+  search: true,
   keyboardShortcuts: true,
   visualHints: true,
   quotaBar: true,

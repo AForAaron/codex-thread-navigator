@@ -1,8 +1,7 @@
 import { sha256Hex } from "../../core/src/hash.ts";
 import type { PreviewFixture } from "./fixture.ts";
 
-export async function renderPreviewThread(host: HTMLElement, fixture: PreviewFixture): Promise<HTMLElement> {
-  host.replaceChildren();
+export async function renderPreviewThread(host: HTMLElement, fixture: PreviewFixture, signal?: AbortSignal): Promise<HTMLElement> {
   const viewport = document.createElement("div");
   viewport.className = "app-shell-main-content-viewport";
   viewport.dataset.previewThread = fixture.threadId;
@@ -50,7 +49,7 @@ export async function renderPreviewThread(host: HTMLElement, fixture: PreviewFix
   spacer.setAttribute("aria-hidden", "true");
   viewport.append(spacer);
 
-  host.append(viewport);
+  if (!signal?.aborted) host.replaceChildren(viewport);
   return viewport;
 }
 

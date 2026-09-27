@@ -13,8 +13,10 @@
     "verify:codex": "bash scripts/verify-codex-untouched.sh",
     "g0:check": "node scripts/g0-preflight.mjs",
     "land": "tsc -p tsconfig.json && CODEX_NAV_READ_HISTORY=1 node scripts/land-real-anchors.mjs",
+    "land:all": "tsc -p tsconfig.json && CODEX_NAV_READ_HISTORY=1 CODEX_NAV_LAND_ALL=1 node scripts/land-real-anchors.mjs",
     "preview": "tsc -p tsconfig.json && npm run build:preview && node scripts/preview-server.mjs",
     "preview:panel": "npm run preview",
+    "e2e:navigation": "npm run build && node scripts/e2e-navigation.mjs",
     "e2e:preview": "npm run build:preview && node scripts/e2e-preview.mjs",
     "e2e:index": "tsc -p tsconfig.json && node scripts/e2e-index.mjs"
   },
