@@ -40,7 +40,7 @@ async function readBody(req) {
 }
 
 function withDb(fn) {
-  const db = openNavigatorDb();
+  const db = openNavigatorDb(process.env.CODEX_NAV_DB_PATH || undefined);
   try {
     return fn(db);
   } finally {
@@ -91,6 +91,7 @@ async function handleApi(req, res, url) {
         threadId: row.threadId,
         title: row.title,
         userPromptCount: db.listPromptIndex(row.threadId).length,
+        indexedAt: row.updatedAt,
       }));
       return { threads, selectedThreadId: threads[0]?.threadId ?? null, source: "navigator.sqlite" };
     });

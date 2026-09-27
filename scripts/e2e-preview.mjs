@@ -3,12 +3,14 @@
  * Drive the isolated preview like a user. Does not open ChatGPT/Codex/Explodex.
  */
 import { spawn } from "node:child_process";
-import { dirname, resolve } from "node:path";
+import { rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const url = process.env.CODEX_NAV_PREVIEW_URL ?? "http://127.0.0.1:8765/tools/panel-preview.html";
+const url = process.env.CODEX_NAV_PREVIEW_URL ?? "http://127.0.0.1:8880/tools/panel-preview.html";
 const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 const results = [];
@@ -55,30 +57,37 @@ async function scrollTop(page) {
 }
 
 async function ensurePreviewServer() {
-  try {
-    const res = await fetch(url);
-    if (res.ok) return null;
-  } catch {
-    /* start one */
+  const target = new URL(url);
+  if (target.hostname !== "127.0.0.1" || target.protocol !== "http:") {
+    throw new Error("e2e requires an isolated loopback server");
   }
+  let occupied = false;
+  try {
+    await fetch(target.origin + "/api/health", { signal: AbortSignal.timeout(1000) });
+    occupied = true;
+  } catch { /* no reachable server */ }
+  if (occupied) throw new Error("e2e refuses to reuse a server whose database is unknown");
   const child = spawn(process.execPath, [resolve(root, "scripts/preview-server.mjs")], {
     cwd: root,
+    env: { ...process.env, CODEX_NAV_PREVIEW_PORT: target.port },
     stdio: ["ignore", "pipe", "pipe"],
   });
-  await new Promise((resolveStart, reject) => {
-    const timer = setTimeout(() => reject(new Error("preview server did not start")), 8000);
-    const onData = (buf) => {
-      if (String(buf).includes("preview")) {
-        clearTimeout(timer);
-        resolveStart();
-      }
-    };
-    child.stdout.on("data", onData);
-    child.stderr.on("data", onData);
-    child.on("error", reject);
-  });
+  try {
+    await new Promise((resolveStart, reject) => {
+      const timer = setTimeout(() => reject(new Error("isolated server did not start")), 8000);
+      child.stdout.on("data", (buf) => {
+        if (String(buf).includes(target.origin)) { clearTimeout(timer); resolveStart(); }
+      });
+      child.on("error", (err) => { clearTimeout(timer); reject(err); });
+      child.on("exit", (code) => { clearTimeout(timer); reject(new Error(`server exited: ${code}`)); });
+    });
+  } catch (err) { child.kill("SIGTERM"); throw err; }
   return child;
 }
+
+// Isolated DB: preview e2e never touches the user's real navigator.sqlite.
+const ISO_DB = join(tmpdir(), `cn-e2e-preview-${process.pid}.sqlite`);
+process.env.CODEX_NAV_DB_PATH = ISO_DB;
 
 let server = null;
 let browser = null;
@@ -221,7 +230,7 @@ try {
     `before=${beforeJump} after=${afterClick.scrollTop} active=${afterClick.active}`,
   );
 
-  await page.goto("http://127.0.0.1:8765/tools/panel-preview.html?nav=1", { waitUntil: "networkidle" });
+  await page.goto(`${url}?nav=1`, { waitUntil: "networkidle" });
   await page.waitForSelector('[data-codex-navigator="true"]', { timeout: 10000 });
   await page.waitForFunction(() => window.__CN_PREVIEW__?.promptCount === 16, null, { timeout: 10000 });
   const s1 = await state(page);
@@ -503,7 +512,7 @@ try {
     `promptsGone=${promptsGone} quotaGone=${quotaGone} railGone=${railGone} progressGone=${progressGone}`,
   );
 
-  await page.goto("http://127.0.0.1:8765/tools/panel-preview.html?quotaFixture=1", { waitUntil: "networkidle" });
+  await page.goto(`${url}?quotaFixture=1`, { waitUntil: "networkidle" });
   await page.waitForSelector("[data-cn='quota-label']");
   const fixtureLabel = await page.locator("[data-cn='quota-label']").innerText();
   record(
@@ -519,6 +528,7 @@ try {
     await browser?.close();
   } finally {
     server?.kill();
+    for (const suffix of ["", "-wal", "-shm"]) rmSync(ISO_DB + suffix, { force: true });
   }
 }
 

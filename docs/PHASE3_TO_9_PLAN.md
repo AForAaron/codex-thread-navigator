@@ -76,5 +76,5 @@
 ## 本轮落地（预览，2026-09-12）
 
 - 预览：`npm run preview` → `http://127.0.0.1:8765/tools/panel-preview.html`
-- 验收：`npm test`（36）+ `npm run e2e:preview`（Playwright 真点击）+ `bash scripts/verify-codex-untouched.sh`
+- 验收：`npm test`（44）+ `npm run e2e:preview`（Playwright 真点击）+ `bash scripts/verify-codex-untouched.sh`
 - Desktop / Explodex / `~/.codex`：**没接、没读、没改**

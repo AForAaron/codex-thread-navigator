@@ -79,6 +79,7 @@
         <div class="official-top">
           <p class="pill">本机索引 · 不是 Codex Desktop</p>
           <p class="pill warn">官方窗口点目录：还不会跳转</p>
+          <p class="pill" id="freshness">索引时间：—</p>
         </div>
         <div class="official-body">
           <h1>官方对话保持原样</h1>
@@ -94,6 +95,7 @@
           <button type="button" class="gear" data-cn="settings-gear" aria-label="设置">⚙</button>
         </div>
         <select data-cn="thread" id="thread"></select>
+        <input class="field" type="search" id="q" data-cn="search-title" placeholder="搜索 prompt 标题" />
         <div class="tabs" role="tablist">
           <button type="button" data-tab="prompts" aria-selected="true">提问</button>
           <button type="button" data-tab="bookmarks">书签</button>
@@ -108,6 +110,8 @@
           <button type="button" id="bookmarkTurn">★ 轮次</button>
           <button type="button" id="bookmarkMsg">★ 消息</button>
           <button type="button" id="bookmarkHd">★ 标题</button>
+          <button type="button" id="copyTitle" title="复制所选项标题，去官方窗口 ⌘F">复制标题</button>
+          <button type="button" id="copyRoute" title="复制 /thread/&lt;id&gt; 路由">复制路由</button>
         </div>
       </aside>
     </div>
@@ -121,6 +125,7 @@
         selected: null,
         tab: "prompts",
         settingsOpen: false,
+        q: "",
       };
 
       function clip(id) {
@@ -152,7 +157,10 @@
       function renderPrompts() {
         const list = $("#prompts");
         list.innerHTML = "";
-        state.prompts.forEach((row, i) => {
+        const rows = state.q
+          ? state.prompts.filter((row) => (row.title || "").toLowerCase().includes(state.q))
+          : state.prompts;
+        rows.forEach((row, i) => {
           const li = document.createElement("li");
           li.dataset.turnId = row.turnId;
           li.dataset.itemId = row.itemId;
@@ -251,6 +259,11 @@
       async function boot() {
         const data = await api("/api/threads");
         state.threads = data.threads || [];
+        const latest = state.threads.reduce((m, r) => Math.max(m, r.indexedAt || 0), 0);
+        if (latest) {
+          const days = Math.max(0, Math.round((Date.now() - latest) / 86400000));
+          $("#freshness").textContent = `索引 ${new Date(latest).toLocaleDateString("zh-CN")}（${days} 天前）`;
+        }
         if (state.threads.length === 0) {
           $("#status").textContent = "还没有索引。需要时在仓库里手动跑一次 npm run land（短时只读打开对话库后退出）。预览服务不会扫 ~/.codex。";
           return;
@@ -275,6 +288,20 @@
       $("#showDebug").addEventListener("change", () => {
         document.documentElement.dataset.debug = $("#showDebug").checked ? "true" : "";
       });
+      $("#q").addEventListener("input", () => {
+        state.q = $("#q").value.trim().toLowerCase();
+        renderPrompts();
+      });
+      async function copyText(text, label) {
+        try {
+          await navigator.clipboard.writeText(text);
+          $("#status").textContent = `${label}已复制，去官方窗口 ⌘F 定位`;
+        } catch (err) {
+          $("#status").textContent = `复制失败：${err.message}`;
+        }
+      }
+      $("#copyTitle").addEventListener("click", () => state.selected && copyText(state.selected.title || "", "标题"));
+      $("#copyRoute").addEventListener("click", () => state.threadId && copyText(`/thread/${state.threadId}`, "路由"));
       $("#bookmarkTurn").addEventListener("click", () => state.selected && selectPrompt(state.selected, "turn"));
       $("#bookmarkMsg").addEventListener("click", () => state.selected && selectPrompt(state.selected, "message"));
       $("#bookmarkHd").addEventListener("click", () => state.selected && selectPrompt(state.selected, "heading"));

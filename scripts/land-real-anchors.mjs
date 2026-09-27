@@ -26,6 +26,28 @@ if (!source) {
 }
 
 const threads = listLocalThreads();
+
+// CODEX_NAV_LAND_ALL=1: index every thread's anchors (no bookmarks / reading writes), then exit.
+if (process.env.CODEX_NAV_LAND_ALL === "1") {
+  if (threads.length === 0) {
+    console.error("No local threads found.");
+    process.exit(1);
+  }
+  const dbAll = openNavigatorDb();
+  let indexed = 0;
+  for (const row of threads) {
+    if (row.threadId.startsWith("thread_preview")) continue;
+    const prompts = listLocalUserPrompts(row.threadId);
+    if (prompts.length === 0) continue;
+    indexLocalThread(dbAll, row, prompts);
+    indexed += 1;
+  }
+  dbAll.setPreference("landing.source", "local-thread-history(all)");
+  dbAll.close();
+  console.log(JSON.stringify({ ok: true, mode: "all", threadsIndexed: indexed, threadsSeen: threads.length }, null, 2));
+  process.exit(0);
+}
+
 const thread = threads.find((row) => row.userPromptCount >= 3) ?? threads[0];
 if (!thread) {
   console.error("No local userMessage rows found.");
