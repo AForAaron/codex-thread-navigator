@@ -11,6 +11,7 @@
     "init-data-dir": "node scripts/init-data-dir.mjs",
     "test": "npm run build && node --test dist/packages/core/src/persistence/schema.test.js dist/packages/core/src/adapters/codex-current.test.js dist/packages/core/src/appserver/client.test.js dist/packages/core/src/hash.test.js dist/packages/core/src/reading/restore.test.js dist/packages/core/src/reading/progress.test.js dist/packages/core/src/keymap/shortcuts.test.js dist/packages/core/src/preview-contract.test.js dist/packages/core/src/bookmarks/types.test.js dist/packages/core/src/outline/headings.test.js dist/packages/core/src/search/search.test.js dist/packages/core/src/follow/follow.test.js dist/packages/core/src/export/export.test.js dist/packages/core/src/discovery/local-history.test.js dist/packages/core/src/quota/session-quota.test.js",
     "verify:codex": "bash scripts/verify-codex-untouched.sh",
+    "g0:check": "node scripts/g0-preflight.mjs",
     "land": "tsc -p tsconfig.json && CODEX_NAV_READ_HISTORY=1 node scripts/land-real-anchors.mjs",
     "preview": "tsc -p tsconfig.json && npm run build:preview && node scripts/preview-server.mjs",
     "preview:panel": "npm run preview",

@@ -1,5 +1,7 @@
 # Codex Navigator
 
+> **EN:** A local, read-only navigation & archive layer for long Codex Desktop (ChatGPT.app) threads — prompt index, outline, bookmarks, reading position and search, stored as anchors (ids / hashes / short titles) in a local SQLite. The official app is never modified or injected; jumping inside the official window stays a gated, opt-in future step and is disabled today. MIT licensed. Unofficial, no affiliation with OpenAI or Explodex.
+
 Codex Desktop **长对话导航增强**。不是主题、不是 launcher、不是 AI assistant。
 
 标准体验（后续 Phase）：右侧可折叠 Navigator — Prompt 导航 / Outline / Bookmark / 阅读位置 / Viewport lock / Search / Jump Latest。
@@ -54,6 +56,14 @@ npm run land             # 手动、短时只读 ~/.codex 对话库，写入 nav
 npm run preview          # 127.0.0.1：只读 navigator.sqlite，不再打开 ~/.codex
 ```
 
+## 日常使用（三步）
+
+1. `npm run land` —— 短时只读扫描 `~/.codex/thread_history_*.sqlite`，把最近一个合格 thread 的锚点写入 `navigator.sqlite` 后退出。**索引是快照**：有新对话后重跑（`npm run land:all` 可索引全部 thread）。
+2. `npm run preview` —— 启动仅绑 127.0.0.1 的服务（Ctrl+C 停止）。
+3. 打开 `http://127.0.0.1:8765/tools/desktop-index.html` 管理**真实索引**（浏览 / 标题搜索 / 书签 / 阅读位置 / 复制定位辅助）；或 `/tools/panel-preview.html` 看全功能预览（fixture 假数据）。
+
+注意：官方 ChatGPT 窗口内点目录**不会跳转**（注入未接，by design）。用索引页的「复制标题」到官方窗口 ⌘F 定位，或「复制路由」留存 thread 地址。
+
 ## 禁用 / Safe Mode
 
 见 [docs/SAFE_MODE.md](docs/SAFE_MODE.md)。最短路径：
@@ -81,4 +91,5 @@ backups/                读取备份
 
 ## 许可证与关系
 
+MIT，见 [LICENSE](./LICENSE)。
 与 OpenAI / Explodex 均无官方关系。Explodex：[dan-dr/explodex](https://github.com/dan-dr/explodex)。
