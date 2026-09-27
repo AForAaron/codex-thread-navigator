@@ -1,7 +1,11 @@
+import type { ConversationIdentity } from "../navigation/host.js";
+
 export type RestoreTier = "turn+item+block" | "turn+item" | "turn" | "none";
 
 export interface ReadingAnchor {
   threadId: string;
+  /** v4: explicit surface/branch/window; absent on legacy anchors. */
+  identity?: ConversationIdentity;
   turnId?: string;
   itemId?: string;
   itemIndex?: number;

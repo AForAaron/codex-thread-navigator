@@ -32,3 +32,17 @@ export function restoreReadingPosition(saved: ReadingAnchor, candidates: Restore
   }
   return { ok: true, candidate: sameTurn[0]!, tier: "turn" };
 }
+
+/** Scoped v4 restore. Legacy resolution remains available for explicit migration only. */
+export function restoreScopedReadingPosition(
+  saved: ReadingAnchor,
+  identity: import("../navigation/host.js").ConversationIdentity,
+  candidates: RestoreCandidate[],
+): RestoreResult {
+  const stored = saved.identity;
+  if (!stored || saved.threadId !== identity.threadId || stored.surface !== identity.surface ||
+      stored.threadId !== identity.threadId || stored.branchId !== identity.branchId || stored.windowId !== identity.windowId) {
+    return { ok: false, tier: "none" };
+  }
+  return restoreReadingPosition(saved, candidates);
+}
