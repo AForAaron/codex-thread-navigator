@@ -7,7 +7,18 @@ cd "$(git rev-parse --show-toplevel)"
 
 PATTERN='aaron|guorui|gmail|MacBook Pro|/Users/[a-z]+'
 
-HITS="$(git ls-files -z | xargs -0 grep -iIlE "$PATTERN" 2>/dev/null | grep -vx 'scripts/check-privacy\.sh' || true)"
+# The public repository owner's exact MIT copyright notice is intentional.
+# Check the rest of LICENSE normally; do not exempt the entire file.
+HITS="$(while IFS= read -r -d '' file; do
+  [ "$file" = "scripts/check-privacy.sh" ] && continue
+  if [ "$file" = "LICENSE" ]; then
+    if sed '/^Copyright (c) 2026 AForAaron$/d' "$file" | grep -qiE "$PATTERN"; then
+      printf '%s\n' "$file"
+    fi
+  elif grep -qiE "$PATTERN" "$file" 2>/dev/null; then
+    printf '%s\n' "$file"
+  fi
+done < <(git ls-files -z))"
 if [ -n "$HITS" ]; then
   echo "check-privacy: personal tokens found in tracked files:" >&2
   echo "$HITS" >&2
