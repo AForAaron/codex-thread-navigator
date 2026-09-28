@@ -8,6 +8,8 @@
 
 正式入口说明：https://help.openai.com/en/articles/6614161-how-can-i-contact-support
 
+2026-09-28：用户明确要求提交；本轮 Computer Use 浏览器状态读取再次超时。未显示可操作的 Help Center 表单，未发送询问、无工单号。参见 `REAL_ENV_TEST_20260928.md`。
+
 ## 可提交正文
 
 主题：询问 ChatGPT / Codex 桌面应用受支持的会话导航扩展与测试接口
@@ -33,7 +35,7 @@ Computer Use 文档明确不能自动化 ChatGPT 自身，因此我们未绕过�
 如支持，请提供接口文档、接入权限、兼容版本、推荐测试环境及停用方式；如不支持，也请明确说明哪些能力当前不对第三方开放，是否存在官方反馈或开发者试点渠道。
 
 环境：macOS，安装包元数据显示版本 26.924.22138、build 11645，Bundle ID com.openai.codex。
-公开项目：https://github.com/AForAaron/codex-thread-navigator
+公开项目：当前项目仓库；如支持人员需要，可在提交表单时附上仓库链接。
 
 感谢。
 
