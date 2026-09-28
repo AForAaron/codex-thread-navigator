@@ -26,9 +26,11 @@ export interface AppServerThreadRef {
  *   update-thread-settings-for-next-turn
  *   start-turn-for-host
  *
- * There is **no** documented AppServer RPC to list user messages or resolve the
- * current threadId without already knowing it. Those methods return UNVERIFIED_RPC
- * rather than invented payloads.
+ * The official Codex App Server documents thread/read(includeTurns) and
+ * experimental thread/turns/list(itemsView=full) for a known thread id.
+ * This Explodex-facing interface has not verified that its bridge can relay
+ * those JSON-RPC methods to the desktop app, nor can it identify the current
+ * in-view thread. Those unverified operations return UNVERIFIED_RPC.
  */
 export interface AppServerClient {
   readonly kind: "explodex-bridge" | "unavailable";

@@ -59,7 +59,7 @@ export class ExplodexAppServerClient implements AppServerClient {
 
   async listUserTurns(_threadId: string): Promise<Capability<UserTurnIndex[]>> {
     return unavailable(
-      "No documented AppServer RPC lists user messages. Do not send speculative types against a live session.",
+      "Official App Server has thread/read(includeTurns), but forwarding it through this Explodex bridge and mapping items is unverified. Do not send speculative calls against a live session.",
       "UNVERIFIED_RPC",
       "appserver-bridge",
     );

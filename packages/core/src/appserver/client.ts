@@ -35,7 +35,7 @@ export class UnavailableAppServerClient implements AppServerClient {
 
   async listUserTurns(_threadId: string): Promise<Capability<UserTurnIndex[]>> {
     return unavailable(
-      "No documented AppServer RPC lists user turns. Use DomAdapter.listUserPrompts() after selectors are verified on this Codex build.",
+      "Official App Server has thread/read(includeTurns), but this client has no App Server connection or verified current-thread binding.",
       "UNVERIFIED_RPC",
       "appserver-bridge",
     );
