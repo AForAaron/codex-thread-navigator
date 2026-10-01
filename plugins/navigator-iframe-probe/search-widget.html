@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Codex 已知线程全文搜索</title>
+  <style>
+    :root { color-scheme: light dark; font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 12px; background: light-dark(#f7f7f8,#1d1d20); color: light-dark(#242428,#f5f5f5); }
+    main { border: 1px solid light-dark(#c5c5cb,#6a6a72); border-radius: 10px; background: light-dark(#fff,#28282d); max-width: 600px; padding: 14px; }
+    h1 { margin: 0 0 3px; font-size: 16px; }
+    .sub { color: light-dark(#626772,#bbc1cc); font-size: 11px; margin: 0 0 12px; }
+    ol { max-height: 400px; overflow-y: auto; padding-left: 0; margin: 10px 0 0; list-style: none; }
+    li { border-bottom: 1px solid light-dark(#ececf0,#444); padding: 8px 3px; }
+    .meta { color: light-dark(#626772,#bbc1cc); font-size: 11px; font-variant-numeric: tabular-nums; margin-bottom: 3px; }
+    .snippet { overflow-wrap: anywhere; white-space: pre-wrap; }
+    #status { margin: 10px 0 0; color: light-dark(#626772,#bbc1cc); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Codex 已知线程全文搜索</h1>
+    <p class="sub">只读搜索提问和回答 · 结果只显示在工具卡片中，不能滚动宿主对话</p>
+    <ol id="hits" aria-live="polite"></ol>
+    <p id="status">等待工具结果…</p>
+  </main>
+  <script>
+    const hits = document.getElementById("hits");
+    const status = document.getElementById("status");
+    function receive(result) {
+      const data = result?.structuredContent ?? result;
+      if (data?.kind !== "known-thread-search" || !Array.isArray(data.hits)) return;
+      hits.replaceChildren();
+      for (const hit of data.hits) {
+        const li = document.createElement("li");
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        meta.textContent = `第 ${hit.ordinal ?? "?"} 轮 · ${hit.role === "user" ? "提问" : "回答"} · 位置 ${hit.index + 1}`;
+        const snippet = document.createElement("div");
+        snippet.className = "snippet";
+        snippet.textContent = hit.snippet;
+        li.append(meta, snippet);
+        hits.append(li);
+      }
+      const completeness = data.historyComplete ? "目录已完整读取" : "结果尚不完整";
+      const truncation = data.resultsTruncated ? `；只显示前 ${data.returnedHits} 处` : "";
+      status.textContent = `${completeness} · 共 ${data.turnCount} 轮 · 找到 ${data.totalMatches} 处${truncation}。`;
+    }
+    window.addEventListener("message", event => {
+      if (event.source !== window.parent || event.data?.jsonrpc !== "2.0") return;
+      if (event.data.method === "ui/notifications/tool-result") receive(event.data.params);
+    }, { passive: true });
+    receive(window.openai?.toolOutput);
+  </script>
+</body>
+</html>

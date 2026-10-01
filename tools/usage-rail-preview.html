@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Codex 额度窄栏预览</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #151515; color: #eee; }
+    .shell { display: flex; height: 100vh; min-height: 520px; }
+    .rail { position: relative; z-index: 2; width: 112px; flex: 0 0 112px; background: #29292a; border-right: 1px solid #3d3d3e; display: flex; flex-direction: column; align-items: center; padding: 18px 0 22px; }
+    .rail-top { display: grid; gap: 24px; color: #aaa; }
+    .glyph { width: 24px; height: 24px; border: 2px solid currentColor; border-radius: 7px; }
+    .rail-bottom { margin-top: auto; display: grid; justify-items: center; gap: 18px; }
+    .utility { width: 44px; height: 44px; border: 1px solid #434349; border-radius: 50%; display: grid; place-items: center; color: #d9b5ff; background: #3c3050; font-size: 21px; }
+    .avatar { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: #14b8a6; font-size: 14px; }
+    .sidebar { width: 310px; background: #1e1e1f; border-right: 1px solid #343438; padding: 26px 18px; }
+    .sidebar strong { font-size: 22px; }
+    .navline { height: 36px; border-radius: 10px; margin-top: 14px; background: #303033; }
+    .navline:nth-of-type(3) { width: 84%; } .navline:nth-of-type(4) { width: 72%; }
+    main { flex: 1; padding: 52px 5vw; }
+    main h1 { font-size: 21px; font-weight: 600; }
+    main p { max-width: 52ch; color: #b9b9bd; line-height: 1.6; }
+    .demo { margin-top: 20px; color: #a5a5ac; font-size: 13px; }
+    #usage-slot .cn-usage { position: relative; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="rail" aria-label="示意窄栏">
+      <div class="rail-top" aria-hidden="true"><div class="glyph"></div><div class="glyph"></div><div class="glyph"></div></div>
+      <div class="rail-bottom">
+        <div id="usage-slot"></div>
+        <div class="utility" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3v11m-4-4 4 4 4-4M4 17v2h14v-2"/></svg></div>
+        <div class="avatar" aria-hidden="true">AA</div>
+      </div>
+    </aside>
+    <aside class="sidebar" aria-hidden="true"><strong>Codex</strong><div class="navline"></div><div class="navline"></div><div class="navline"></div></aside>
+    <main><h1>额度位置预览</h1><p>头像上方同时显示五小时、每周剩余额度和可用手动重置次数。它不响应点击、没有弹层，也不会占用现有按钮的点击区域。</p><p class="demo">此页使用 72%／61%／1 次演示数据，不代表你的真实账户用量；它不会连接桌面应用。</p></main>
+  </div>
+  <script src="../dist/preview/usage-rail-preview.js"></script>
+</body>
+</html>

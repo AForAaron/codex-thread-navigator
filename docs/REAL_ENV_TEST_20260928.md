@@ -14,6 +14,16 @@
 | 官方支持表单 | Computer Use 浏览器状态读取 | 本轮超时；上一轮 IAB 和已连接 Edge 浏览器打开支持页也超时 | 没有看到表单、没有发送询问、没有工单号 |
 | 宿主 UI | `com.openai.codex` Computer Use | 此前申请被自动审批明确拒绝；本轮没有重试或改用 CDP、AppleScript、间接注入等方式 | 用户授权已经明确，但工具限制仍生效；挂载、定位与 dispose 均未执行 |
 
+## 09:08 补充：App Server 与插件 UI 样例
+
+后续只读验证证明，一个已知 Codex 线程可由官方 App Server 的实验性分页接口读取到全部 10 轮、55 条 user/agent 消息，且连续两次返回的轮次 ID 和消息 ID 一致。较长线程仍遇到 `subagent-completed` 项反序列化错误，因此不能外推为所有线程可完整读取。官方 MCP Apps iframe 样例通过 SDK 与本机 HTTP 协议测试，但尚未在 Chat 或 Codex 宿主中安装、调用或观察显示位置。命令、数据边界和后续验收步骤见 [APP_SERVER_AND_IFRAME_PROBE_20260928.md](APP_SERVER_AND_IFRAME_PROBE_20260928.md)。这没有改变上方 G0 与四项能力的真实宿主验收状态。
+
+14:25 Asia/Shanghai 更新：用户已在 `codex-ui-local` 本地 marketplace 安装 `navigator-iframe-probe`。只读检查确认 `installed=true`、`enabled=true`；本机 MCP 服务由可撤销的 `launchctl` 用户任务运行，`127.0.0.1:8879/health` 返回 `{"ok":true}`。尚未在新的 Codex 会话中实际调用工具或看到 iframe；因此“Codex 宿主显示位置”仍为未验证。此样例没有配置网页 Chat 接入。
+
+15:34 Asia/Shanghai 更新：用户提供的 Codex 截图显示探针 iframe 确实位于工具结果区域，且 `window.openai` 可用；此前“Codex 宿主显示位置未验证”的记录由此更新为**探针工具结果 iframe 已验证**。随后新增 `list_known_thread_directory`：只接受显式线程 ID，端到端 MCP 调用从此前已知线程返回 10 个短标题条目，目录 UI resource 的 MIME 为 `text/html;profile=mcp-app`；65 项测试通过。新版目录卡片在 Codex 的实际渲染、自动识别当前会话、点击后定位宿主消息、阅读恢复与全文搜索均未验证或尚不具备。G0 整体仍未通过。
+
+16:32 Asia/Shanghai 更新：用户又提供一个新的 Codex 测试会话截图。`list_known_thread_directory` 针对明确给出的线程 ID 返回完整 10 轮，截图中真实宿主工具结果区显示“Codex 已知线程目录”卡片、标题列表与筛选框。因此“新版目录卡片在 Codex 实际渲染”已通过。截图不证明卡片内筛选交互、当前会话自动识别、点击轮次后滚动原生对话、阅读恢复或全文搜索；这些仍未验收。截图包含真实提问短标题，没有复制进仓库或公开产物。
+
 ## 四项能力在真实宿主的验收状态
 
 | 能力 | Chat | Codex |

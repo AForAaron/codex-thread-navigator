@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Navigator iframe placement probe</title>
+  <style>
+    :root { color-scheme: light dark; font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 12px; background: light-dark(#f7f7f8,#1d1d20); color: light-dark(#242428,#f5f5f5); }
+    .probe { border: 1px solid light-dark(#b9b9be,#74747c); border-radius: 10px; padding: 12px; max-width: 420px; background: light-dark(#fff,#28282d); }
+    .tag { color: light-dark(#555b65,#c1c8d3); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+    h1 { margin: 5px 0; font-size: 15px; }
+    p { margin: 4px 0; }
+    .ruler { height: 46px; display: flex; align-items: center; gap: 4px; margin: 8px 0; }
+    .ruler i { display: block; height: 3px; width: 6px; border-radius: 5px; background: currentColor; opacity: .5; }
+    .ruler i:nth-child(2) { width: 12px; opacity: .7; }
+    .ruler i:nth-child(3) { width: 26px; opacity: 1; }
+    .ruler i:nth-child(4) { width: 12px; opacity: .7; }
+    .small { font-size: 11px; color: light-dark(#555b65,#c1c8d3); }
+  </style>
+</head>
+<body>
+  <div class="probe" data-probe="navigator-iframe">
+    <div class="tag">Plugin iframe · placement probe</div>
+    <h1>导航插件显示位置验证</h1>
+    <p>如果你在 Chat / Codex 的工具结果旁看到此卡片，表示该界面渲染了插件 iframe。</p>
+    <div class="ruler" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+    <p class="small">本样例不读取对话、不修改宿主目录条或滚动。</p>
+    <p class="small" id="host">宿主桥接：检查中</p>
+  </div>
+  <script>
+    const output = document.getElementById("host");
+    output.textContent = window.openai ? "宿主桥接：window.openai 可用" : "宿主桥接：未检测到（独立预览正常）";
+  </script>
+</body>
+</html>

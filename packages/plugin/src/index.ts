@@ -2,9 +2,14 @@ import { createCodexCurrentAdapter } from "../../core/src/adapters/codex-current
 import { createExplodexAppServerClient } from "../../core/src/appserver/explodex-bridge.ts";
 import { createUnavailableAppServerClient } from "../../core/src/appserver/client.ts";
 import { createNavigatorPanel, NAVIGATOR_PANEL_CSS, type NavigatorPanelApi } from "./ui/navigator-panel.ts";
+import { createUsageIndicator, USAGE_INDICATOR_CSS } from "./ui/usage-indicator.ts";
+import { startUsageController } from "./usage-controller.ts";
+import { parseCodexRateLimits } from "../../core/src/quota/codex-rate-limits.ts";
+import { startChatSession } from "./chat-session.ts";
 
 const PLUGIN_ID = "codex-navigator";
 const ENABLED_KEY = "explodex-codex-navigator";
+const USAGE_ENABLED_KEY = "explodex-codex-usage-rail";
 
 type ExplodexPluginApi = {
   pluginId: string;
@@ -13,7 +18,7 @@ type ExplodexPluginApi = {
   waitFor: (zoneId: string, cb: () => void) => () => void;
   registerOptions: (handlers: { render: (container: HTMLElement) => void }) => void;
   storage?: { persisted?: { get: (k: string, fb?: unknown) => unknown; set: (k: string, v: unknown) => void } };
-  bridge?: { isAvailable: () => boolean; send: (type: string, payload?: Record<string, unknown>) => Promise<unknown> };
+  bridge?: { isAvailable: () => boolean; send: (type: string, payload?: Record<string, unknown>) => Promise<unknown>; rpc?: (method: string, params?: Record<string, unknown>) => Promise<unknown | null> };
   codex?: { getThreadConversation: (id: string) => { id: string } | null };
   components?: {
     checkboxField: (opts: { label: string; checked?: boolean; onChange?: (v: boolean) => void }) => HTMLElement;
@@ -28,6 +33,14 @@ function readEnabled(api: ExplodexPluginApi): boolean {
 
 function writeEnabled(api: ExplodexPluginApi, panelEnabled: boolean): void {
   api.storage?.persisted?.set(ENABLED_KEY, { panelEnabled });
+}
+
+function readUsageEnabled(api: ExplodexPluginApi): boolean {
+  return api.storage?.persisted?.get(USAGE_ENABLED_KEY, false) === true;
+}
+
+function writeUsageEnabled(api: ExplodexPluginApi, enabled: boolean): void {
+  api.storage?.persisted?.set(USAGE_ENABLED_KEY, enabled);
 }
 
 function ensureStyle(): void {
@@ -77,6 +90,8 @@ function setup(api: ExplodexPluginApi): () => void {
   const teardowns: Array<() => void> = [];
   let panelApi: NavigatorPanelApi | null = null;
   let panelTeardown: (() => void) | null = null;
+  let usageTeardown: (() => void) | null = null;
+  const sessionUsage = (window as Window & { __CODEX_USAGE_RAIL_SESSION__?: boolean }).__CODEX_USAGE_RAIL_SESSION__ === true;
 
   const appserver = api.bridge
     ? createExplodexAppServerClient({ bridge: api.bridge, codex: api.codex })
@@ -95,6 +110,8 @@ function setup(api: ExplodexPluginApi): () => void {
 
   const showPanel = () => {
     if (panelApi) return;
+    const restoreUsage = usageTeardown !== null;
+    if (restoreUsage) hideUsage();
     panelApi = createNavigatorPanel({
       enabled: true,
       onToggleEnabled: (enabled) => {
@@ -119,9 +136,67 @@ function setup(api: ExplodexPluginApi): () => void {
       if (!panelApi) return;
       if (!cap.ok) panelApi.setStatus(`AppServer: ${cap.code} — ${cap.message}`);
     });
+    if (restoreUsage) showUsage();
+  };
+
+  const hideUsage = () => {
+    usageTeardown?.();
+    usageTeardown = null;
+  };
+
+  const showUsage = () => {
+    if (usageTeardown) return;
+    const indicator = createUsageIndicator();
+    const mounted = api.mount("statusOverlay", () => indicator.root);
+    if (!mounted) {
+      indicator.dispose();
+      api.log.warn("usage rail not mounted: statusOverlay is unavailable");
+      return;
+    }
+    const style = document.createElement("style");
+    style.dataset.codexUsageRail = "true";
+    style.textContent = `${USAGE_INDICATOR_CSS}\n.cn-usage { position: fixed; left: 2px; bottom: 68px; z-index: 2147483639; }\n@media (max-height: 540px) { .cn-usage { display: none; } }`;
+    document.documentElement.append(style);
+    // A guessed fixed location must fail closed if a native rail control occupies it.
+    const checkClearance = () => {
+      const rect = indicator.root.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const points = [
+        [rect.left + rect.width / 2, rect.top + rect.height / 2],
+        [rect.left + 3, rect.top + 3],
+        [rect.right - 3, rect.bottom - 3],
+      ];
+      const occupied = points.some(([x, y]) => {
+        const underlying = document.elementFromPoint(x, y);
+        return underlying?.closest("button, a, input, select, textarea, [role='button'], [role='link']") != null;
+      });
+      indicator.root.style.visibility = occupied ? "hidden" : "visible";
+    };
+    indicator.root.style.visibility = "hidden";
+    const placementFrame = window.requestAnimationFrame(checkClearance);
+    window.addEventListener("resize", checkClearance);
+    const placementTimer = window.setInterval(checkClearance, 3000);
+    const sessionWindow = window as Window & { __codexNavigatorSetUsage?: (data: unknown) => void };
+    if (sessionUsage) {
+      sessionWindow.__codexNavigatorSetUsage = (data) => {
+        const limits = parseCodexRateLimits(data);
+        indicator.setState(limits ? { kind: "ready", limits, updatedAt: Date.now() } : { kind: "unavailable", reason: "额度数据未通过校验。" });
+      };
+    }
+    const stopReading = sessionUsage ? () => {} : startUsageController(api.bridge, indicator.setState);
+    usageTeardown = () => {
+      if (sessionUsage) delete sessionWindow.__codexNavigatorSetUsage;
+      stopReading();
+      window.cancelAnimationFrame(placementFrame);
+      window.removeEventListener("resize", checkClearance);
+      window.clearInterval(placementTimer);
+      indicator.dispose();
+      style.remove();
+    };
   };
 
   if (readEnabled(api)) showPanel();
+  if (sessionUsage || readUsageEnabled(api)) showUsage();
 
   api.registerOptions({
     render(container) {
@@ -149,6 +224,30 @@ function setup(api: ExplodexPluginApi): () => void {
             return label;
           })();
       container.append(box);
+      const usageBox = api.components?.checkboxField
+        ? api.components.checkboxField({
+            label: "实验性：在左侧窄栏头像上方显示 Codex 额度",
+            checked: readUsageEnabled(api),
+            onChange: (checked) => {
+              writeUsageEnabled(api, checked);
+              if (checked) showUsage();
+              else hideUsage();
+            },
+          })
+        : (() => {
+            const label = document.createElement("label");
+            const input = document.createElement("input");
+            input.type = "checkbox";
+            input.checked = readUsageEnabled(api);
+            input.addEventListener("change", () => {
+              writeUsageEnabled(api, input.checked);
+              if (input.checked) showUsage();
+              else hideUsage();
+            });
+            label.append(input, " 实验性：左侧窄栏 Codex 额度");
+            return label;
+          })();
+      container.append(usageBox);
       const note = api.components?.metaText
         ? api.components.metaText(
             "Safe Mode: 直接打开 /Applications/ChatGPT.app，不要运行 explodex。本插件默认不改 Codex DOM。",
@@ -161,6 +260,10 @@ function setup(api: ExplodexPluginApi): () => void {
   });
 
   teardowns.push(hidePanel);
+  teardowns.push(hideUsage);
+  if ((window as Window & { __CODEX_CHAT_NAV_SESSION__?: boolean }).__CODEX_CHAT_NAV_SESSION__ === true) {
+    teardowns.push(startChatSession());
+  }
   return () => {
     for (const stop of teardowns) stop();
   };

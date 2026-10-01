@@ -1,0 +1,18 @@
+{
+  "name": "navigator-iframe-probe",
+  "version": "0.1.0+codex.20260928084433",
+  "description": "Read-only Codex MCP Apps probe for a known thread's turn directory and full-text search; no host UI modification.",
+  "author": {
+    "name": "Local developer"
+  },
+  "interface": {
+    "displayName": "Navigator Iframe Probe",
+    "shortDescription": "Inspect plugin cards and search a known thread.",
+    "longDescription": "Read-only placement, directory, and search cards for an explicitly supplied Codex thread ID; no current-thread detection or host scrolling.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Show the navigator iframe placement probe."
+  },
+  "mcpServers": "./.mcp.json"
+}

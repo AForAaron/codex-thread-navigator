@@ -82,7 +82,7 @@ if [[ -f "$BASELINE_FILE" ]]; then
       echo "    shasum -a 256 \"$APP/Contents/Info.plist\" \"$APP/Contents/MacOS/ChatGPT\" > \"\$D/machine/ChatGPT-sha256.txt\""
       echo "    codesign -dvv \"$APP\" > \"\$D/machine/ChatGPT-codesign.txt\" 2>&1"
       echo "    cp \"$BASELINE_FILE\" \"\$D/machine/\" 2>/dev/null || true"
-      echo "    echo \"$(basename "$D")\" > \"$REPO_ROOT/backups/LATEST.txt\""
+      printf '    echo "$(basename "$D")" > "%s/backups/LATEST.txt"\n' "$REPO_ROOT"
     fi
   fi
 fi
