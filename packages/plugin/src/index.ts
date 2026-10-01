@@ -155,7 +155,7 @@ function setup(api: ExplodexPluginApi): () => void {
     }
     const style = document.createElement("style");
     style.dataset.codexUsageRail = "true";
-    style.textContent = `${USAGE_INDICATOR_CSS}\n.cn-usage { position: fixed; left: 2px; bottom: 68px; z-index: 2147483639; }\n@media (max-height: 540px) { .cn-usage { display: none; } }`;
+    style.textContent = `${USAGE_INDICATOR_CSS}\n.cn-usage { position: fixed; left: 8px; bottom: 68px; z-index: 2147483639; }\n@media (max-height: 540px) { .cn-usage { display: none; } }`;
     document.documentElement.append(style);
     // A guessed fixed location must fail closed if a native rail control occupies it.
     const checkClearance = () => {

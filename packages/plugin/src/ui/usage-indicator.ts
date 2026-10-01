@@ -3,20 +3,20 @@ import { codexUsageWindows, type CodexRateLimits } from "../../../core/src/quota
 /** Three passive readings. No button, overlay, tooltip, or pointer target. */
 export const USAGE_INDICATOR_CSS = `
 .cn-usage {
-  width: 48px;
-  height: 60px;
+  width: 40px;
+  height: 92px;
   display: grid;
   align-content: center;
-  gap: 4px;
+  gap: 6px;
   color: #f1f1f3;
-  font: 650 10px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font: 650 11px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   pointer-events: none;
   user-select: none;
 }
-.cn-usage-row { display: flex; align-items: baseline; justify-content: space-between; }
-.cn-usage-label { color: #b9b9bd; font-weight: 500; }
+.cn-usage-row { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.cn-usage-label { color: #b9b9bd; font-size: 9px; font-weight: 500; }
 .cn-usage-value[data-low="true"] { color: #ffb6a9; }
 @media (prefers-color-scheme: light) {
   .cn-usage { color: #25252a; }
