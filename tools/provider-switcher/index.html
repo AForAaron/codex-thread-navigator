@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Codex · 模型来源</title>
+  <link rel="stylesheet" href="/ui.css">
+</head>
+<body>
+  <main class="control" aria-labelledby="title">
+    <header>
+      <div class="title-row"><h1 id="title">模型来源</h1><button class="icon-button" id="theme" aria-label="切换深浅主题" title="切换深浅主题"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"/></svg></button></div>
+      <p class="subtitle">Codex 本机控制 · 保留原生模型选择</p>
+      <div class="configured"><span class="status-dot" aria-hidden="true"></span><span id="configured">正在读取配置…</span></div>
+    </header>
+    <form id="selection">
+      <fieldset class="sources"><legend class="sr-only">选择模型来源</legend>
+        <label class="source"><input type="radio" name="provider" value="openai" checked><span class="source-copy"><strong>Codex / OpenAI</strong><span>模型与推理强度由 Codex 原生菜单选择</span></span></label>
+        <label class="source"><input type="radio" name="provider" value="opencode-go"><span class="source-copy"><strong>OpenCode Go <span class="tag">Keychain</span></strong><span>使用已验证的 Responses 模型</span></span></label>
+      </fieldset>
+      <section id="model-section" hidden aria-labelledby="models-title">
+        <div class="section-heading"><h2 id="models-title">Go 模型</h2><span id="model-count"></span></div>
+        <fieldset id="models"><legend class="sr-only">选择 Go 模型</legend></fieldset>
+        <p class="detail">已验证文件读取和工具返回；复杂 MCP 与桌面工具仍取决于模型。</p>
+      </section>
+      <section class="usage" aria-labelledby="usage-title">
+        <div class="section-heading"><h2 id="usage-title">OpenCode Go 用量</h2><button class="text-button" id="refresh" type="button">刷新</button></div>
+        <div id="usage-data" aria-live="polite"><p class="muted">正在读取套餐额度…</p></div>
+        <div class="usage-footer"><span id="usage-time">从 Go 读取</span><a href="https://opencode.ai" target="_blank" rel="noreferrer">打开控制台 <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3H3v10h10v-2M8 3h5v5M7 9l6-6"/></svg></a></div>
+      </section>
+      <footer>
+        <p class="apply-note"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 7a6.5 6.5 0 1 0 0 6M16 3v4h-4"/></svg><span>保存后，在任务结束时重启 Codex 并新建聊天。当前任务继续运行。</span></p>
+        <p id="message" role="status" hidden></p>
+        <button class="primary" id="apply" type="submit" disabled>读取配置中…</button>
+      </footer>
+    </form>
+    <p class="outside-note">密钥保留在 macOS Keychain，控制页只接收模型与用量数据。</p>
+  </main>
+  <script src="/ui.js"></script>
+</body>
+</html>
