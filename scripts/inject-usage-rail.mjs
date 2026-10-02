@@ -5,6 +5,7 @@
  * run before Codex mounts. Reads no conversation data and touches no app files.
  */
 import { readFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { ReadOnlyAppServer } from "./appserver-history-client.mjs";
@@ -27,15 +28,30 @@ const bootSource = `(() => {
   function boot() {
     if (!document.head || !document.body) return;
     observer.disconnect();
-    try {\n${sdkSource}\nwindow.__CODEX_USAGE_RAIL_SESSION__ = true;\nwindow.__CODEX_CHAT_NAV_SESSION__ = true;\n${pluginSource}\n}
+    try {\n${sdkSource}\nwindow.__CODEX_USAGE_RAIL_SESSION__ = true;\nwindow.__CODEX_CHAT_NAV_SESSION__ = true;\n${pluginSource}\n
+      // Explodex's built-in shell adds its own rail entry, which widens the native 52 px rail and
+      // pushes the quota/provider controls out of their slot. It cannot be unloaded, so hide it.
+      if (!document.getElementById("cn-hide-explodex-shell")) {
+        const hide = document.createElement("style");
+        hide.id = "cn-hide-explodex-shell";
+        hide.textContent = '[data-explodex-nav="explodex-shell"],[data-explodex-footer-plugins]{display:none!important}';
+        document.head.append(hide);
+      }\n}
     catch (error) { window.__EXPLODEX_BOOT_ERROR__ = String(error?.stack ?? error).slice(0, 800); }
   }
   observer.observe(document, { childList: true, subtree: true });
   boot();
 })()`;
-const targets = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(3000) }).then((res) => res.json());
-const page = targets.find((target) => target.type === "page" && target.url === "app://-/index.html" && target.webSocketDebuggerUrl);
-if (!page) throw new Error("Codex renderer target not found");
+// The debug port opens before the main window's page exists; wait for it (up to ~30 s).
+let page = null;
+for (let attempt = 0; attempt < 60 && !page; attempt++) {
+  if (attempt) await new Promise((done) => setTimeout(done, 500));
+  try {
+    const targets = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(3000) }).then((res) => res.json());
+    page = targets.find((target) => target.type === "page" && target.url === "app://-/index.html" && target.webSocketDebuggerUrl) ?? null;
+  } catch { /* port may still be warming up */ }
+}
+if (!page) throw new Error("Codex renderer target not found after 30 s");
 
 const ws = new WebSocket(page.webSocketDebuggerUrl);
 await new Promise((resolve, reject) => {
@@ -47,6 +63,14 @@ let stopping = false;
 let wakeWait = () => {};
 for (const signal of ["SIGINT", "SIGTERM"]) process.once(signal, () => { stopping = true; wakeWait(); });
 const pending = new Map();
+// Codex quit (or its renderer went away): stop right away instead of after the next 60 s refresh.
+ws.onclose = () => {
+  if (!stopping) console.log("Codex closed the debug connection; stopping the session.");
+  stopping = true;
+  for (const waiter of pending.values()) waiter({ error: { message: "debug connection closed" } });
+  pending.clear();
+  wakeWait();
+};
 ws.onmessage = (event) => {
   const message = JSON.parse(String(event.data));
   const waiter = pending.get(message.id);
@@ -86,6 +110,9 @@ try {
     if (state?.loaded) break;
   }
   if (!state?.loaded) throw new Error(`Plugin did not load after renderer reload: ${JSON.stringify(state)}`);
+  const providerRail = spawn(process.execPath, [join(root, "scripts", "provider-rail-session.mjs")], {
+    env: { ...process.env, EXPLODEX_DEBUG_PORT: String(port) }, stdio: ["ignore", "inherit", "inherit"],
+  });
   const client = new ReadOnlyAppServer();
   await client.connect();
   console.log("Codex usage rail and Chat directory loaded; read-only quota refresh is active. Keep this Terminal open; Ctrl+C stops both.");
@@ -122,6 +149,7 @@ try {
       });
     }
   } finally {
+    providerRail.kill("SIGTERM");
     await client.close();
     if (ws.readyState === WebSocket.OPEN) {
       try {
