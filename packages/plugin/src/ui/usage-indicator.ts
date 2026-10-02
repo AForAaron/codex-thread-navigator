@@ -3,7 +3,7 @@ import { codexUsageWindows, type CodexRateLimits } from "../../../core/src/quota
 /** Three passive readings. No button, overlay, tooltip, or pointer target. */
 export const USAGE_INDICATOR_CSS = `
 .cn-usage {
-  width: 40px;
+  width: 36px;
   height: 92px;
   display: grid;
   align-content: center;

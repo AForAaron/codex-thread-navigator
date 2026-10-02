@@ -3,6 +3,7 @@ import { createExplodexAppServerClient } from "../../core/src/appserver/explodex
 import { createUnavailableAppServerClient } from "../../core/src/appserver/client.ts";
 import { createNavigatorPanel, NAVIGATOR_PANEL_CSS, type NavigatorPanelApi } from "./ui/navigator-panel.ts";
 import { createUsageIndicator, USAGE_INDICATOR_CSS } from "./ui/usage-indicator.ts";
+import { computeUsagePlacement } from "./ui/usage-placement.ts";
 import { startUsageController } from "./usage-controller.ts";
 import { parseCodexRateLimits } from "../../core/src/quota/codex-rate-limits.ts";
 import { startChatSession } from "./chat-session.ts";
@@ -155,27 +156,56 @@ function setup(api: ExplodexPluginApi): () => void {
     }
     const style = document.createElement("style");
     style.dataset.codexUsageRail = "true";
-    style.textContent = `${USAGE_INDICATOR_CSS}\n.cn-usage { position: fixed; left: 8px; bottom: 68px; z-index: 2147483639; }\n@media (max-height: 540px) { .cn-usage { display: none; } }`;
+    style.textContent = `${USAGE_INDICATOR_CSS}\n.cn-usage { position: fixed; left: 0; top: 0; z-index: 2147483639; }\n@media (max-height: 540px) { .cn-usage { display: none; } }`;
     document.documentElement.append(style);
-    // A guessed fixed location must fail closed if a native rail control occupies it.
-    const checkClearance = () => {
-      const rect = indicator.root.getBoundingClientRect();
-      if (!rect.width || !rect.height) return;
-      const points = [
-        [rect.left + rect.width / 2, rect.top + rect.height / 2],
-        [rect.left + 3, rect.top + 3],
-        [rect.right - 3, rect.bottom - 3],
-      ];
-      const occupied = points.some(([x, y]) => {
-        const underlying = document.elementFromPoint(x, y);
-        return underlying?.closest("button, a, input, select, textarea, [role='button'], [role='link']") != null;
+    // The native rail ends with a variable-height footer. Position above that
+    // section so new update/profile controls push the quota display upward.
+    let observedRail: HTMLElement | null = null;
+    let observedFooter: HTMLElement | null = null;
+    let placementFrame = 0;
+    const queuePlacement = () => {
+      if (placementFrame) return;
+      placementFrame = window.requestAnimationFrame(() => {
+        placementFrame = 0;
+        const rail = [...document.querySelectorAll<HTMLElement>("nav[data-app-navigation-rail]")]
+          .find((item) => item.getBoundingClientRect().width >= 44);
+        const footer = rail?.lastElementChild;
+        if (!rail || !(footer instanceof HTMLElement) || !footer.querySelector("button")) {
+          indicator.root.style.visibility = "hidden";
+          return;
+        }
+        if (rail !== observedRail || footer !== observedFooter) {
+          resizeObserver.disconnect();
+          mutationObserver.disconnect();
+          resizeObserver.observe(rail);
+          resizeObserver.observe(footer);
+          mutationObserver.observe(rail, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "hidden"] });
+          observedRail = rail;
+          observedFooter = footer;
+        }
+        const footerRect = footer.getBoundingClientRect();
+        const lastNavigationControlBottom = [...rail.querySelectorAll<HTMLElement>("button, a, [role='button']")]
+          .filter((item) => !footer.contains(item))
+          .map((item) => item.getBoundingClientRect())
+          .filter((rect) => rect.width > 0 && rect.height > 0 && rect.left < footerRect.right && rect.right > footerRect.left && rect.bottom <= footerRect.top)
+          .reduce<number | null>((last, rect) => Math.max(last ?? -Infinity, rect.bottom), null);
+        const position = computeUsagePlacement(rail.getBoundingClientRect(), footerRect,
+          indicator.root.getBoundingClientRect(), lastNavigationControlBottom);
+        if (!position) {
+          indicator.root.style.visibility = "hidden";
+          return;
+        }
+        indicator.root.style.left = `${position.left}px`;
+        indicator.root.style.top = `${position.top}px`;
+        indicator.root.style.visibility = "visible";
       });
-      indicator.root.style.visibility = occupied ? "hidden" : "visible";
     };
+    const resizeObserver = new ResizeObserver(queuePlacement);
+    const mutationObserver = new MutationObserver(queuePlacement);
     indicator.root.style.visibility = "hidden";
-    const placementFrame = window.requestAnimationFrame(checkClearance);
-    window.addEventListener("resize", checkClearance);
-    const placementTimer = window.setInterval(checkClearance, 3000);
+    queuePlacement();
+    window.addEventListener("resize", queuePlacement);
+    const placementTimer = window.setInterval(queuePlacement, 1500);
     const sessionWindow = window as Window & { __codexNavigatorSetUsage?: (data: unknown) => void };
     if (sessionUsage) {
       sessionWindow.__codexNavigatorSetUsage = (data) => {
@@ -188,7 +218,9 @@ function setup(api: ExplodexPluginApi): () => void {
       if (sessionUsage) delete sessionWindow.__codexNavigatorSetUsage;
       stopReading();
       window.cancelAnimationFrame(placementFrame);
-      window.removeEventListener("resize", checkClearance);
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+      window.removeEventListener("resize", queuePlacement);
       window.clearInterval(placementTimer);
       indicator.dispose();
       style.remove();
