@@ -12,3 +12,12 @@ backups/*/
 
 # local Claude Code harness state (permissions etc.) — never commit
 .claude/
+
+# Python runtime caches (provider switcher)
+__pycache__/
+*.pyc
+
+# design-review screenshots and scratch output (may contain personal UI content)
+.impeccable/
+tmp/*
+!tmp/preview-rail.png
