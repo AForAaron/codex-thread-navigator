@@ -50,6 +50,9 @@ export function createUsageIndicator(doc: Document = document): {
     row.append(labelNode, valueNode);
   }
   root.append(fiveHour, weekly, resetCredits);
+  let expiryTimer = 0;
+  let lastUpdatedAt: number | null = null;
+  const view = doc.defaultView;
   const setValue = (row: HTMLElement, value: string | null, low = false) => {
     const target = row.lastElementChild as HTMLElement;
     target.textContent = value ?? "—";
@@ -57,13 +60,25 @@ export function createUsageIndicator(doc: Document = document): {
     else target.dataset.low = String(low);
   };
   const setState = (state: UsageIndicatorState) => {
+    view?.clearTimeout(expiryTimer);
+    expiryTimer = 0;
+    lastUpdatedAt = null;
     if (state.kind !== "ready") {
+      delete root.dataset.updatedAt;
       setValue(fiveHour, null);
       setValue(weekly, null);
       setValue(resetCredits, null);
       root.setAttribute("aria-label", state.kind === "loading" ? "Codex 额度读取中" : `Codex 额度不可用：${state.reason}`);
       return;
     }
+    if (!Number.isFinite(state.updatedAt) || Date.now() - state.updatedAt >= 150_000) {
+      setState({ kind: "unavailable", reason: "额度数据已过期，正在等待更新。" });
+      return;
+    }
+    lastUpdatedAt = state.updatedAt;
+    expiryTimer = view?.setTimeout(() => setState({ kind: "unavailable", reason: "额度数据已过期，正在等待更新。" }),
+      Math.max(0, state.updatedAt + 150_000 - Date.now())) ?? 0;
+    root.dataset.updatedAt = String(state.updatedAt);
     const windows = codexUsageWindows(state.limits);
     const fiveHourPercent = windows.fiveHour ? Math.round(windows.fiveHour.remainingPercent) : null;
     const weeklyPercent = windows.weekly ? Math.round(windows.weekly.remainingPercent) : null;
@@ -73,6 +88,18 @@ export function createUsageIndicator(doc: Document = document): {
     setValue(resetCredits, resetCount === null ? null : `${resetCount}次`);
     root.setAttribute("aria-label", `Codex 五小时剩余 ${fiveHourPercent === null ? "不可用" : `${fiveHourPercent}%`}，每周剩余 ${weeklyPercent === null ? "不可用" : `${weeklyPercent}%`}，可用手动重置 ${resetCount === null ? "不可用" : `${resetCount}次`}`);
   };
+  const checkFreshness = () => {
+    if (lastUpdatedAt !== null && Date.now() - lastUpdatedAt >= 150_000) {
+      setState({ kind: "unavailable", reason: "额度数据已过期，正在等待更新。" });
+    }
+  };
+  doc.addEventListener("visibilitychange", checkFreshness);
+  view?.addEventListener("focus", checkFreshness);
   setState({ kind: "loading" });
-  return { root, setState, dispose: () => root.remove() };
+  return { root, setState, dispose: () => {
+    view?.clearTimeout(expiryTimer);
+    doc.removeEventListener("visibilitychange", checkFreshness);
+    view?.removeEventListener("focus", checkFreshness);
+    root.remove();
+  } };
 }

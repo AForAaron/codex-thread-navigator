@@ -8,11 +8,12 @@ import { readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { ReadOnlyAppServer } from "./appserver-history-client.mjs";
+import { createQuotaFeed } from "./quota-feed.mjs";
 import { parseCodexRateLimits } from "../dist/packages/core/src/quota/codex-rate-limits.js";
 
 const root = resolve(import.meta.dirname, "..");
 const port = Number(process.env.EXPLODEX_DEBUG_PORT ?? 9333);
+const attach = process.argv.includes("--attach");
 const pluginDir = join(homedir(), ".explodex", "plugins", "codex-navigator");
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("Invalid debug port");
 
@@ -98,9 +99,31 @@ function send(method, params = {}, timeoutMs = 10000) {
 try {
   await send("Page.enable");
   await send("Page.addScriptToEvaluateOnNewDocument", { source: bootSource, world: "MAIN" });
-  await send("Page.reload", { ignoreCache: false });
+  if (attach) {
+    const existing = await send("Runtime.evaluate", { expression: "!!window.Explodex", returnByValue: true });
+    if (!existing?.result?.value) throw new Error("Attach requires an existing Explodex session");
+    await send("Runtime.evaluate", { expression: `window.Explodex.plugins.unload("codex-navigator")`, awaitPromise: true });
+    const loaded = await send("Runtime.evaluate", { expression: pluginSource, awaitPromise: true });
+    if (loaded?.exceptionDetails) throw new Error("Updated plugin could not be attached");
+  } else {
+    // Reloading while Codex is still bootstrapping aborts its startup ("ChatGPT failed to start",
+    // ERR_FAILED -2; seen on 26.930). Wait until the app shell has actually rendered first.
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const ready = await send("Runtime.evaluate", {
+        expression: `document.readyState === "complete" && !!document.querySelector("nav[data-app-navigation-rail]")`,
+        returnByValue: true,
+      }).catch(() => null);
+      if (ready?.result?.value === true) break;
+      await new Promise((done) => setTimeout(done, 500));
+    }
+    await new Promise((done) => setTimeout(done, 1500));
+    // A slow reload is not a failure by itself; the load check below decides.
+    await send("Page.reload", { ignoreCache: false }, 30000).catch((error) => {
+      console.error(`Page.reload did not confirm in time (${error.message}); checking plugin state anyway.`);
+    });
+  }
   let state = null;
-  for (let attempt = 0; attempt < 40; attempt++) {
+  for (let attempt = 0; attempt < 80; attempt++) {
     await new Promise((done) => setTimeout(done, 500));
     const result = await send("Runtime.evaluate", {
       expression: `(() => ({ sdk: !!window.Explodex, loaded: window.Explodex?.plugins?.list?.().includes("codex-navigator") ?? false, captured: typeof window.__explodexAppServerSend === "function", bootError: window.__EXPLODEX_BOOT_ERROR__ ?? null }))()`,
@@ -113,8 +136,7 @@ try {
   const providerRail = spawn(process.execPath, [join(root, "scripts", "provider-rail-session.mjs")], {
     env: { ...process.env, EXPLODEX_DEBUG_PORT: String(port) }, stdio: ["ignore", "inherit", "inherit"],
   });
-  const client = new ReadOnlyAppServer();
-  await client.connect();
+  const client = createQuotaFeed();
   console.log("Codex usage rail and Chat directory loaded; read-only quota refresh is active. Keep this Terminal open; Ctrl+C stops both.");
   try {
     while (!stopping && ws.readyState === WebSocket.OPEN) {
@@ -141,6 +163,10 @@ try {
         });
         console.log(JSON.stringify(check?.result?.value ?? { mounted: false }));
       } catch (error) {
+        await send("Runtime.evaluate", {
+          expression: "window.__codexNavigatorSetUsage?.(null)",
+          returnByValue: true,
+        }).catch(() => {});
         console.error(`Read-only quota refresh failed: ${error instanceof Error ? error.message : String(error)}`);
       }
       await new Promise((resolve) => {
