@@ -28,7 +28,7 @@ export const USAGE_INDICATOR_CSS = `
 export type UsageIndicatorState =
   | { kind: "loading" }
   | { kind: "unavailable"; reason: string }
-  | { kind: "ready"; limits: CodexRateLimits; updatedAt: number };
+  | { kind: "ready"; limits: CodexRateLimits; updatedAt: number; source?: "native-cache" };
 
 export function createUsageIndicator(doc: Document = document): {
   root: HTMLOutputElement;
@@ -60,6 +60,7 @@ export function createUsageIndicator(doc: Document = document): {
     else target.dataset.low = String(low);
   };
   const setState = (state: UsageIndicatorState) => {
+    root.dataset.state = state.kind;
     view?.clearTimeout(expiryTimer);
     expiryTimer = 0;
     lastUpdatedAt = null;
@@ -71,13 +72,16 @@ export function createUsageIndicator(doc: Document = document): {
       root.setAttribute("aria-label", state.kind === "loading" ? "Codex 额度读取中" : `Codex 额度不可用：${state.reason}`);
       return;
     }
-    if (!Number.isFinite(state.updatedAt) || Date.now() - state.updatedAt >= 150_000) {
+    if (!Number.isFinite(state.updatedAt) || state.source !== "native-cache" && Date.now() - state.updatedAt >= 150_000) {
       setState({ kind: "unavailable", reason: "额度数据已过期，正在等待更新。" });
       return;
     }
-    lastUpdatedAt = state.updatedAt;
-    expiryTimer = view?.setTimeout(() => setState({ kind: "unavailable", reason: "额度数据已过期，正在等待更新。" }),
-      Math.max(0, state.updatedAt + 150_000 - Date.now())) ?? 0;
+    root.dataset.source = state.source ?? "external";
+    if (state.source !== "native-cache") {
+      lastUpdatedAt = state.updatedAt;
+      expiryTimer = view?.setTimeout(() => setState({ kind: "unavailable", reason: "额度数据已过期，正在等待更新。" }),
+        Math.max(0, state.updatedAt + 150_000 - Date.now())) ?? 0;
+    }
     root.dataset.updatedAt = String(state.updatedAt);
     const windows = codexUsageWindows(state.limits);
     const fiveHourPercent = windows.fiveHour ? Math.round(windows.fiveHour.remainingPercent) : null;

@@ -5,11 +5,10 @@
  * run before Codex mounts. Reads no conversation data and touches no app files.
  */
 import { readFile } from "node:fs/promises";
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { createQuotaFeed } from "./quota-feed.mjs";
-import { parseCodexRateLimits } from "../dist/packages/core/src/quota/codex-rate-limits.js";
+import { createRendererConnection } from "./renderer-connection.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const port = Number(process.env.EXPLODEX_DEBUG_PORT ?? 9333);
@@ -29,7 +28,8 @@ const bootSource = `(() => {
   function boot() {
     if (!document.head || !document.body) return;
     observer.disconnect();
-    try {\n${sdkSource}\nwindow.__CODEX_USAGE_RAIL_SESSION__ = true;\nwindow.__CODEX_CHAT_NAV_SESSION__ = true;\n${pluginSource}\n
+    if (window.Explodex?.plugins?.list?.().includes("codex-navigator")) return;
+    try {\nif (!window.Explodex) {\n${sdkSource}\n}\nwindow.__CODEX_USAGE_RAIL_SESSION__ = true;\nwindow.__CODEX_CHAT_NAV_SESSION__ = true;\n${pluginSource}\n
       // Explodex's built-in shell adds its own rail entry, which widens the native 52 px rail and
       // pushes the quota/provider controls out of their slot. It cannot be unloaded, so hide it.
       if (!document.getElementById("cn-hide-explodex-shell")) {
@@ -54,47 +54,34 @@ for (let attempt = 0; attempt < 60 && !page; attempt++) {
 }
 if (!page) throw new Error("Codex renderer target not found after 30 s");
 
-const ws = new WebSocket(page.webSocketDebuggerUrl);
-await new Promise((resolve, reject) => {
-  ws.onopen = resolve;
-  ws.onerror = () => reject(new Error("CDP connection failed"));
-});
-let nextId = 0;
 let stopping = false;
 let wakeWait = () => {};
 for (const signal of ["SIGINT", "SIGTERM"]) process.once(signal, () => { stopping = true; wakeWait(); });
-const pending = new Map();
-// Codex quit (or its renderer went away): stop right away instead of after the next 60 s refresh.
-ws.onclose = () => {
-  if (!stopping) console.log("Codex closed the debug connection; stopping the session.");
-  stopping = true;
-  for (const waiter of pending.values()) waiter({ error: { message: "debug connection closed" } });
-  pending.clear();
-  wakeWait();
+const appPid = Number(execFileSync("/usr/sbin/lsof", ["-nP", "-t", `-iTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" }).trim().split("\n")[0]);
+const appRunning = () => {
+  try { process.kill(appPid, 0); return true; } catch (error) { return error.code === "EPERM"; }
 };
-ws.onmessage = (event) => {
-  const message = JSON.parse(String(event.data));
-  const waiter = pending.get(message.id);
-  if (waiter) {
-    pending.delete(message.id);
-    waiter(message);
-  }
-};
-function send(method, params = {}, timeoutMs = 10000) {
-  return new Promise((resolve, reject) => {
-    const id = ++nextId;
-    const timer = setTimeout(() => {
-      pending.delete(id);
-      reject(new Error(`${method} timed out`));
-    }, timeoutMs);
-    pending.set(id, (message) => {
-      clearTimeout(timer);
-      if (message.error) reject(new Error(`${method}: ${message.error.message}`));
-      else resolve(message.result);
+const renderer = createRendererConnection({ port,
+  onReconnect: async (rawSend) => {
+    await rawSend("Page.enable");
+    await rawSend("Page.addScriptToEvaluateOnNewDocument", { source: bootSource, world: "MAIN" });
+    const state = await rawSend("Runtime.evaluate", {
+      expression: "({sdk:!!window.Explodex, controller:typeof window.__codexNavigatorGetUsageStatus==='function'})", returnByValue: true,
     });
-    ws.send(JSON.stringify({ id, method, params }));
-  });
-}
+    if (!state?.result?.value?.controller) {
+      const expression = state?.result?.value?.sdk
+        ? `window.Explodex.plugins.unload("codex-navigator"); window.__CODEX_USAGE_RAIL_SESSION__=true; window.__CODEX_CHAT_NAV_SESSION__=true;\n${pluginSource}`
+        : bootSource;
+      const loaded = await rawSend("Runtime.evaluate", { expression, awaitPromise: true });
+      if (loaded?.exceptionDetails) throw new Error("Renderer plugin recovery failed");
+    }
+    console.log("Renderer connection recovered; native quota subscription is active.");
+  },
+});
+const send = (method, params = {}, timeoutMs = 10000) => renderer.send(method, params, timeoutMs);
+const appTimer = setInterval(() => {
+  if (!appRunning()) { stopping = true; wakeWait(); }
+}, 2000);
 
 try {
   await send("Page.enable");
@@ -136,48 +123,16 @@ try {
   const providerRail = spawn(process.execPath, [join(root, "scripts", "provider-rail-session.mjs")], {
     env: { ...process.env, EXPLODEX_DEBUG_PORT: String(port) }, stdio: ["ignore", "inherit", "inherit"],
   });
-  const client = createQuotaFeed();
-  console.log("Codex usage rail and Chat directory loaded; read-only quota refresh is active. Keep this Terminal open; Ctrl+C stops both.");
+  console.log("Codex usage rail now follows the native quota cache; no independent quota polling. Keep this session running; Ctrl+C unloads the plugin.");
   try {
-    while (!stopping && ws.readyState === WebSocket.OPEN) {
-      try {
-        const limits = parseCodexRateLimits(await client.readRateLimits());
-        if (!limits) throw new Error("Codex quota response unavailable");
-        const asWindow = (window) => window ? {
-          usedPercent: 100 - window.remainingPercent,
-          windowDurationMins: window.windowDurationMins,
-          resetsAt: window.resetsAt === null ? null : Math.round(window.resetsAt / 1000),
-        } : null;
-        const payload = {
-          rateLimitsByLimitId: { codex: { limitId: "codex", primary: asWindow(limits.primary), secondary: asWindow(limits.secondary) } },
-          rateLimitResetCredits: { availableCount: limits.resetCreditsAvailable },
-        };
-        const result = await send("Runtime.evaluate", {
-          expression: `window.__codexNavigatorSetUsage?.(${JSON.stringify(payload)})`,
-          returnByValue: true,
-        });
-        if (result?.exceptionDetails) throw new Error("Renderer rejected the quota update");
-        const check = await send("Runtime.evaluate", {
-          expression: `(() => { const el = document.querySelector(".cn-usage"); return { mounted: !!el, visible: !!el && getComputedStyle(el).visibility === "visible", text: el?.innerText ?? "" }; })()`,
-          returnByValue: true,
-        });
-        console.log(JSON.stringify(check?.result?.value ?? { mounted: false }));
-      } catch (error) {
-        await send("Runtime.evaluate", {
-          expression: "window.__codexNavigatorSetUsage?.(null)",
-          returnByValue: true,
-        }).catch(() => {});
-        console.error(`Read-only quota refresh failed: ${error instanceof Error ? error.message : String(error)}`);
-      }
-      await new Promise((resolve) => {
-        const timer = setTimeout(resolve, 60_000);
-        wakeWait = () => { clearTimeout(timer); resolve(); };
-      });
-    }
+    // The renderer subscribes locally. CDP only installs/removes UI, not quota data.
+    await new Promise(resolve => {
+      wakeWait = resolve;
+      if (stopping || !appRunning()) resolve();
+    });
   } finally {
     providerRail.kill("SIGTERM");
-    await client.close();
-    if (ws.readyState === WebSocket.OPEN) {
+    if (appRunning()) {
       try {
         await send("Runtime.evaluate", {
           expression: `window.Explodex?.plugins?.unload?.("codex-navigator")`,
@@ -187,5 +142,6 @@ try {
     }
   }
 } finally {
-  ws.close();
+  clearInterval(appTimer);
+  renderer.close();
 }

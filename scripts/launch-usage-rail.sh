@@ -93,11 +93,23 @@ if [[ "$owner_args" != "$APP/Contents/MacOS/ChatGPT"* ]]; then
   fail "端口 ${PORT} 不属于 ChatGPT.app，已拒绝注入。"
 fi
 
-echo "Loading Codex Navigator, Chat directory, and the official read-only quota feed..."
+echo "Loading Codex Navigator, Chat directory, and the native quota subscription..."
 if ! EXPLODEX_DEBUG_PORT="$PORT" node "$ROOT/scripts/inject-usage-rail.mjs"; then
   # Distinguish "Codex was quit" (normal end) from a real load failure.
   if /bin/ps -p "$owner_pid" >/dev/null 2>&1; then
-    fail "插件加载失败，详情见 ~/Library/Logs/CodexNavigator/launcher.log。Codex 仍可正常使用，但三项功能未启用。"
+    replacement_ready=false
+    for _ in {1..5}; do
+      if node "$ROOT/scripts/check-session-health.mjs" "$PORT"; then
+        replacement_ready=true
+        break
+      fi
+      sleep 2
+    done
+    if [[ "$replacement_ready" == true ]]; then
+      echo "A replacement Navigator session is healthy; the previous runner has ended."
+    else
+      fail "插件连接已停止，详情见 ~/Library/Logs/CodexNavigator/launcher.log。Codex 仍可正常使用，但扩展状态未能确认。"
+    fi
   fi
 fi
 echo "Session ended: $(date '+%Y-%m-%d %H:%M:%S')"

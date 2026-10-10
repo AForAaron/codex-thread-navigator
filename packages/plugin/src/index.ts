@@ -4,8 +4,7 @@ import { createUnavailableAppServerClient } from "../../core/src/appserver/clien
 import { createNavigatorPanel, NAVIGATOR_PANEL_CSS, type NavigatorPanelApi } from "./ui/navigator-panel.ts";
 import { createUsageIndicator, USAGE_INDICATOR_CSS } from "./ui/usage-indicator.ts";
 import { computeUsagePlacement } from "./ui/usage-placement.ts";
-import { startUsageController } from "./usage-controller.ts";
-import { parseCodexRateLimits } from "../../core/src/quota/codex-rate-limits.ts";
+import { startNativeUsageController, type NativeUsageStatus } from "./native-usage-controller.ts";
 import { startChatSession } from "./chat-session.ts";
 
 const PLUGIN_ID = "codex-navigator";
@@ -206,17 +205,12 @@ function setup(api: ExplodexPluginApi): () => void {
     queuePlacement();
     window.addEventListener("resize", queuePlacement);
     const placementTimer = window.setInterval(queuePlacement, 1500);
-    const sessionWindow = window as Window & { __codexNavigatorSetUsage?: (data: unknown) => void };
-    if (sessionUsage) {
-      sessionWindow.__codexNavigatorSetUsage = (data) => {
-        const limits = parseCodexRateLimits(data);
-        indicator.setState(limits ? { kind: "ready", limits, updatedAt: Date.now() } : { kind: "unavailable", reason: "额度数据未通过校验。" });
-      };
-    }
-    const stopReading = sessionUsage ? () => {} : startUsageController(api.bridge, indicator.setState);
+    const sessionWindow = window as Window & { __codexNavigatorGetUsageStatus?: () => NativeUsageStatus };
+    const nativeUsage = startNativeUsageController(indicator.setState);
+    sessionWindow.__codexNavigatorGetUsageStatus = nativeUsage.getStatus;
     usageTeardown = () => {
-      if (sessionUsage) delete sessionWindow.__codexNavigatorSetUsage;
-      stopReading();
+      delete sessionWindow.__codexNavigatorGetUsageStatus;
+      nativeUsage.dispose();
       window.cancelAnimationFrame(placementFrame);
       resizeObserver.disconnect();
       mutationObserver.disconnect();
