@@ -1,4 +1,48 @@
-# Codex Navigator
+# Codex Navigator · 长对话导航
+
+> Codex Desktop 长对话导航层：提问目录 / 大纲 / 书签 / 阅读位置 / 搜索。本机 SQLite 只读索引，不存对话正文、不改动官方应用。非官方项目。
+
+## 这是什么
+
+给 Codex Desktop（ChatGPT.app）的长对话加一层导航：把一次会话里的每个提问做成目录，支持大纲视图、书签、记住阅读位置，以及跨会话搜索。
+
+## 三条设计约束
+
+- **只读**：通过本机 SQLite 建索引，不写官方应用的数据
+- **只存锚点**：索引里只有提问位置等锚点，**不存对话正文**
+- **不改动官方应用**：不注入、不修改 ChatGPT.app 本体
+
+## 状态
+
+- **阶段**：可用（含 provider 切换器等配套工具）
+- **已知缺口**：非官方方案，官方接口变动可能影响兼容性
+
+## 结构
+
+```text
+packages/   核心与界面包
+plugins/    宿主插件
+tools/      配套工具
+scripts/    构建与校验脚本
+docs/       设计与实现记录
+tests/      测试
+```
+
+## 开发
+
+```bash
+npm install
+npm test
+```
+
+## 免责声明
+
+非官方项目，与 OpenAI 无关联。
+
+<!-- readme-skeleton: 顶部为统一骨架，其下为原文，未删减 -->
+
+---
+
 
 > **EN:** A local, read-only navigation & archive layer for long Codex Desktop (ChatGPT.app) threads — prompt index, outline, bookmarks, reading position and search, stored as anchors (ids / hashes / short titles) in a local SQLite. The official app is never modified or injected; jumping inside the official window stays a gated, opt-in future step and is disabled today. MIT licensed. Unofficial, no affiliation with OpenAI or Explodex.
 
